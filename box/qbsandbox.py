@@ -10,6 +10,7 @@ from pyvirtualdisplay import Display
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -320,7 +321,8 @@ def chrome_driver(parsed, analyzer_db):
         chrome_options.add_argument('--proxy-server=%s' % parsed['proxy'])
     chrome_options.binary_location = "/usr/bin/google-chrome"
     chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
-    chromebrowser = webdriver.Chrome(options=chrome_options)
+    service = Service(executable_path="/usr/bin/chromedriver")
+    chromebrowser = webdriver.Chrome(options=chrome_options, service=service)
     if parsed["no_redirect"]:
         chromebrowser.implicitly_wait(0.1)
         try:

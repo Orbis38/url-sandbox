@@ -6,10 +6,8 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get install -y build-essential curl unzip wget jq xvfb firefox-esr tor iptables-persistent iptables net-tools supervisor tcpdump libtesseract-dev libleptonica-dev tesseract-ocr
 COPY box-requirements.txt .
 RUN pip install -r box-requirements.txt
-RUN CHROME=google-chrome.deb && \
-    wget "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" -O $CHROME && \
-    dpkg -i $CHROME || true && \
-    apt-get install -y -f
+RUN apt-get update && apt-get install -y chromium chromium-driver && \
+    ln -s /usr/bin/chromium /usr/bin/google-chrome
 COPY ./box/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN mkdir /output
 ADD ./box ./box
