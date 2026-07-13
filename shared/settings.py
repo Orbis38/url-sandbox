@@ -88,4 +88,4 @@ default_colors = {
     "email_index": "mauve_color"
 }
 
-json_settings["docker"]["worker"]["name"]
+

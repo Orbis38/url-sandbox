@@ -4,10 +4,8 @@
 '''
 
 from sys import argv
-from binascii import hexlify
-from pickle import dumps as pdumps
 from binascii import unhexlify
-from pickle import loads
+from json import loads as jloads
 from tinydb import TinyDB, Query
 from qbsandbox import chrome_driver
 from qbsniffer import QSniffer
@@ -17,7 +15,7 @@ from time import sleep
 
 if len(argv) == 2:
     print("[SandBox] Parsing arguments")
-    parsed = loads(unhexlify(argv[1]))
+    parsed = jloads(unhexlify(argv[1]).decode())
     analyzer_logs = TinyDB("{}{}{}".format(parsed['locations']['box_output'], parsed['task'], parsed['locations']['analyzer_logs']))
     if not parsed['use_proxy']:
         print("[SandBox] Using tor")

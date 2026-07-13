@@ -273,9 +273,13 @@ def find_key(key, data):
         elif isinstance(v, list):
             for i in v:
                 if isinstance(i, dict):
-                    return find_key(key, i)
+                    result = find_key(key, i)
+                    if result is not None:
+                        return result
         elif isinstance(v, dict):
-            return find_key(key, v)
+            result = find_key(key, v)
+            if result is not None:
+                return result
 
 
 def parse_ouput(logs, table):
@@ -288,7 +292,7 @@ def parse_ouput(logs, table):
             rec = find_key("headers", _)
             if rec:
                 if "Network.responseReceived" in _["method"]:
-                    table.insert({"type": "Recvied", "headers": rec})
+                    table.insert({"type": "Received", "headers": rec})
                 elif "Network.requestWillBeSent" in _["method"]:
                     table.insert({"type": "Sent", "headers": rec})
         print("[SandBox] parsed output")

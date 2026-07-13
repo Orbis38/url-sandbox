@@ -1,0 +1,393 @@
+diff --git a/backend/qbreport.py b/backend/qbreport.py
+index d10998e..c66b51a 100755
+--- a/backend/qbreport.py
++++ b/backend/qbreport.py
+@@ -11,7 +11,7 @@ from datetime import datetime
+ from tinydb import TinyDB, Query
+ from binascii import unhexlify
+ from jinja2 import Template, Environment, FileSystemLoader
+-from shared.logger import log_string, ignore_excpetion
++from shared.logger import log_string, ignore_exception
+ from shared.settings import defaultdb
+ from shared.mongodbconn import add_item_fs, find_item
+ 
+@@ -163,7 +163,7 @@ def make_report(parsed):
+     with open(analyzer_path) as file:
+         temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], file.read(), parsed['task'], None, parsed['task'], "application/json", datetime.now())
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         screenshot_table = analyzer_db.table('screenshot_table')
+         item = screenshot_table.search(lambda x: x if 'normal_image' in x else 0)
+         if item:
+@@ -172,7 +172,7 @@ def make_report(parsed):
+             table += make_image_table_base64(ENV_JINJA2, img_base64, "Screenshot")
+             log_string("Parsed normal screenshot", task=parsed['task'])
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         screenshot_table = analyzer_db.table('screenshot_table')
+         item = screenshot_table.search(lambda x: x if 'full_image' in x else 0)
+         if item:
+@@ -181,7 +181,7 @@ def make_report(parsed):
+             table += make_image_table_base64(ENV_JINJA2, img_base64, "Full Screenshot")
+             log_string("Parsed full screenshot", task=parsed['task'])
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         network_table = analyzer_db.table('network_table')
+         item = network_table.search(lambda x: x if 'circular_layout' in x else 0)
+         if item:
+@@ -190,54 +190,54 @@ def make_report(parsed):
+             table += make_image_table_base64(ENV_JINJA2, img_base64, "Network Graph")
+             log_string("Parsed Network Graph", task=parsed['task'])
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         words_table = analyzer_db.table('extracted_table')
+         item = words_table.search(lambda x: x if 'dns_records' in x else 0)
+         if item:
+             table += make_json_table_no_loop(ENV_JINJA2, item[0]["dns_records"], "DNS Records")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         words_table = analyzer_db.table('extracted_table')
+         item = words_table.search(lambda x: x if 'Request_Headers' in x else 0)
+         if item:
+             table += make_json_table_no_loop(ENV_JINJA2, item[0]["Request_Headers"], "Request Headers")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         words_table = analyzer_db.table('extracted_table')
+         item = words_table.search(lambda x: x if 'Response_Headers' in x else 0)
+         if item:
+             table += make_json_table_no_loop(ENV_JINJA2, item[0]["Response_Headers"], "Response Headers")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         words_table = analyzer_db.table('extracted_table')
+         item = words_table.search(lambda x: x if 'Certificate' in x else 0)
+         if item:
+             table += make_json_table_no_loop(ENV_JINJA2, item[0]["Certificate"], "Certificate")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         words_table = analyzer_db.table('words_table')
+         item = words_table.search(lambda x: x if 'all_words' in x else 0)
+         if item:
+             table += make_json_table_no_loop(ENV_JINJA2, item, "OCR Words")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         extracted_table = analyzer_db.table('extracted_table')
+         item = extracted_table.search(lambda x: x if 'extracted_links' in x else 0)
+         if item:
+             table += make_json_table_no_loop(ENV_JINJA2, item[0]["extracted_links"], "Extracted links")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         extracted_table = analyzer_db.table('extracted_table')
+         item = extracted_table.search(lambda x: x if 'extracted_scripts' in x else 0)
+         if item:
+             table += make_json_table_no_loop(ENV_JINJA2, item[0]["extracted_scripts"], "Extracted scripts")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         analyzer_table = analyzer_db.table('analyzer_table')
+         if len(analyzer_table.all()) > 0:
+             table += make_json_table(ENV_JINJA2, analyzer_table.all(), "Browser")
+ 
+-    with ignore_excpetion():
++    with ignore_exception(Exception):
+         sniffer_table = sniffer_db.table('sniffer_table')
+         if len(sniffer_table.all()) > 0:
+             table += make_json_table_no_loop(ENV_JINJA2, sniffer_table.all(), "Sniffer")
+diff --git a/backend/worker.py b/backend/worker.py
+index 24b5439..f139514 100755
+--- a/backend/worker.py
++++ b/backend/worker.py
+@@ -10,14 +10,14 @@ from shutil import rmtree
+ from types import FunctionType
+ from docker import from_env
+ from binascii import hexlify
+-from pickle import dumps as pdumps
++from json import dumps as jdumps
+ from jinja2 import Template
+ from celery import Celery
+ from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+ from tldextract import extract as textract
+ from qbreport import make_report
+ from shared.settings import json_settings
+-from shared.logger import log_string, setup_task_logger, ignore_excpetion, cancel_task_logger
++from shared.logger import log_string, setup_task_logger, ignore_exception, cancel_task_logger
+ 
+ DOCKER_CLIENT = from_env()
+ CELERY = Celery(json_settings[environ["project_env"]]["celery_settings"]["name"],
+@@ -54,10 +54,10 @@ def analyze_url(self, parsed):
+         parsed['locations'] = json_settings[environ["project_env"]]["task_logs"]
+         if parsed['use_proxy']:
+             log_string("Proxy detected", task=parsed['task'])
+-            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(pdumps(parsed)).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box")
++            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box")
+         else:
+             log_string("No proxy, running privileged for custom tor config", task=parsed['task'])
+-            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(pdumps(parsed)).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", privileged=True)
++            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", privileged=True)
+         temp_logs = ""
+         for item in range(1, parsed['analyzer_timeout']):
+             temp_logs = temp_container.logs()
+@@ -68,7 +68,7 @@ def analyze_url(self, parsed):
+         temp_container.stop()
+         if len(temp_logs) > 0:
+             for item in temp_logs.split(b"\n"):
+-                with ignore_excpetion():
++                with ignore_exception(Exception):
+                     if len(item) > 0:
+                         log_string(item.decode("utf-8"), task=parsed['task'])
+         log_string("Parsing output", task=parsed['task'])
+diff --git a/box/qbsandbox.py b/box/qbsandbox.py
+index 024162d..f94964e 100755
+--- a/box/qbsandbox.py
++++ b/box/qbsandbox.py
+@@ -273,9 +273,13 @@ def find_key(key, data):
+         elif isinstance(v, list):
+             for i in v:
+                 if isinstance(i, dict):
+-                    return find_key(key, i)
++                    result = find_key(key, i)
++                    if result is not None:
++                        return result
+         elif isinstance(v, dict):
+-            return find_key(key, v)
++            result = find_key(key, v)
++            if result is not None:
++                return result
+ 
+ 
+ def parse_ouput(logs, table):
+@@ -288,7 +292,7 @@ def parse_ouput(logs, table):
+             rec = find_key("headers", _)
+             if rec:
+                 if "Network.responseReceived" in _["method"]:
+-                    table.insert({"type": "Recvied", "headers": rec})
++                    table.insert({"type": "Received", "headers": rec})
+                 elif "Network.requestWillBeSent" in _["method"]:
+                     table.insert({"type": "Sent", "headers": rec})
+         print("[SandBox] parsed output")
+diff --git a/box/qbsniffer.py b/box/qbsniffer.py
+index 7767565..b3bc1e2 100755
+--- a/box/qbsniffer.py
++++ b/box/qbsniffer.py
+@@ -3,18 +3,16 @@
+     box -> sniffer
+ '''
+ 
+-from scapy.all import *
++from scapy.all import Ether, conf, get_if_hwaddr, sniff
+ from sys import stdout
+ from binascii import hexlify
+ from netifaces import ifaddresses, AF_INET, AF_LINK
+-from binascii import hexlify
+ from multiprocessing import Process
+ from re import search as rsearch
+ from re import compile as rcompile
+ from logging import DEBUG, basicConfig, getLogger, FileHandler
+ from logging.handlers import RotatingFileHandler
+ from datetime import datetime
+-from multiprocessing import Process
+ from json import JSONEncoder, dump as jdump, dumps as jdumps, loads as jloads
+ 
+ 
+diff --git a/box/qtor.py b/box/qtor.py
+index 657e060..96dc529 100755
+--- a/box/qtor.py
++++ b/box/qtor.py
+@@ -3,7 +3,7 @@
+     box -> qtor
+ '''
+ 
+-from subprocess import Popen, PIPE, check_output
++from subprocess import Popen, PIPE, check_output, DEVNULL
+ from shutil import copyfile
+ from os import remove
+ from time import sleep
+@@ -11,7 +11,7 @@ from time import sleep
+ 
+ class Connection():
+     def start_supervisord(self):
+-        Popen("supervisord >/dev/null 2>&1", shell=True)
++        Popen(["supervisord"], stdout=DEVNULL, stderr=DEVNULL)
+         sleep(3)
+ 
+     def delete_tor_file(self):
+@@ -55,13 +55,13 @@ iptables -A OUTPUT -j REJECT'''
+         return "Done"
+ 
+     def kill_tor(self):
+-        process = Popen("supervisorctl stop tor > /dev/null 2>&1", shell=True)
+-        out, err = process.communicate()
++        process = Popen(["supervisorctl", "stop", "tor"], stdout=DEVNULL, stderr=DEVNULL)
++        process.communicate()
+         return "Done"
+ 
+     def start_tor(self):
+-        process = Popen("supervisorctl start tor > /dev/null 2>&1", shell=True)
+-        out, err = process.communicate()
++        process = Popen(["supervisorctl", "start", "tor"], stdout=DEVNULL, stderr=DEVNULL)
++        process.communicate()
+         ret = False
+         print("[>] Waiting on Tor..")
+         for x in range(0, 10):
+diff --git a/box/run.py b/box/run.py
+index 20986c9..a9377fb 100755
+--- a/box/run.py
++++ b/box/run.py
+@@ -4,10 +4,8 @@
+ '''
+ 
+ from sys import argv
+-from binascii import hexlify
+-from pickle import dumps as pdumps
+ from binascii import unhexlify
+-from pickle import loads
++from json import loads as jloads
+ from tinydb import TinyDB, Query
+ from qbsandbox import chrome_driver
+ from qbsniffer import QSniffer
+@@ -17,7 +15,7 @@ from time import sleep
+ 
+ if len(argv) == 2:
+     print("[SandBox] Parsing arguments")
+-    parsed = loads(unhexlify(argv[1]))
++    parsed = jloads(unhexlify(argv[1]).decode())
+     analyzer_logs = TinyDB("{}{}{}".format(parsed['locations']['box_output'], parsed['task'], parsed['locations']['analyzer_logs']))
+     if not parsed['use_proxy']:
+         print("[SandBox] Using tor")
+diff --git a/shared/logger.py b/shared/logger.py
+index 8bdb12c..6a0c0ef 100755
+--- a/shared/logger.py
++++ b/shared/logger.py
+@@ -35,9 +35,9 @@ RED_ARROW = '{}{}{}'.format(TerminalColors.Red, ">", TerminalColors.Restore)
+ 
+ 
+ @contextmanager
+-def ignore_excpetion(*exceptions):
++def ignore_exception(*exceptions):
+     '''
+-    catch excpetion
++    catch exception
+     '''
+     try:
+         yield
+@@ -48,7 +48,8 @@ def ignore_excpetion(*exceptions):
+ 
+ def combine_2_dict(a, b):
+     z = a.copy()
+-    return z.update(b)
++    z.update(b)
++    return z
+ 
+ 
+ def setup_task_logger(parsed):
+diff --git a/shared/settings.py b/shared/settings.py
+index aacc179..0937267 100755
+--- a/shared/settings.py
++++ b/shared/settings.py
+@@ -88,4 +88,4 @@ default_colors = {
+     "email_index": "mauve_color"
+ }
+ 
+-json_settings["docker"]["worker"]["name"]
++
+diff --git a/website/web.py b/website/web.py
+index d17b3db..2131003 100755
+--- a/website/web.py
++++ b/website/web.py
+@@ -36,7 +36,7 @@ from bs4 import BeautifulSoup
+ from validator_collection import validators, checkers
+ from werkzeug.exceptions import HTTPException, default_exceptions
+ from shared.settings import defaultdb, json_settings, meta_files_settings, meta_reports_settings, meta_task_files_logs_settings, meta_users_settings, meta_task_logs_settings
+-from shared.logger import ignore_excpetion
++from shared.logger import ignore_exception
+ from shared.mongodbconn import CLIENT, get_it_fs
+ 
+ SWITCHES = [('full_analysis', 'full analysis'), ('use_proxy', 'use proxy'), ('no_redirect', 'no redirect'), ('random_click', 'random click'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on')]
+@@ -1580,7 +1580,7 @@ class CustomAdminIndexView(AdminIndexView):
+         '''
+         toggled route (this will keep track of toggled items)
+         '''
+-        with ignore_excpetion(Exception):
++        with ignore_exception(Exception):
+             if current_user.is_authenticated:
+                 json_content = request.get_json(silent=True)
+                 for key, value in json_content.items():
+@@ -1693,22 +1693,22 @@ def get_stats():
+     get stats from databases
+     '''
+     stats = {}
+-    with ignore_excpetion(Exception):
++    with ignore_exception(Exception):
+         for coll in (defaultdb["reportscoll"], defaultdb["filescoll"], "fs.chunks", "fs.files"):
+             if coll in CLIENT[defaultdb["dbname"]].list_collection_names():
+                 stats.update({"[{}] Collection".format(coll): "Exists"})
+             else:
+                 stats.update({"[{}] Collection".format(coll): "Does not exists"})
+-    with ignore_excpetion(Exception):
++    with ignore_exception(Exception):
+         stats.update({"[Reports] Total reports": CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].find({}).count(),
+                       "[Reports] Total used space": "{}".format(convert_size(CLIENT[defaultdb["dbname"]].command("collstats", defaultdb["reportscoll"])["storageSize"] + CLIENT[defaultdb["dbname"]].command("collstats", defaultdb["reportscoll"])["totalIndexSize"]))})
+-    with ignore_excpetion(Exception):
++    with ignore_exception(Exception):
+         stats.update({"[Files] Total files uploaded": CLIENT[defaultdb["dbname"]][defaultdb["filescoll"]].find({}).count()})
+-    with ignore_excpetion(Exception):
++    with ignore_exception(Exception):
+         stats.update({"[Files] Total uploaded files size": "{}".format(convert_size(CLIENT[defaultdb["dbname"]]["fs.chunks"].find().count() * 255 * 1000))})
+-    with ignore_excpetion(Exception):
++    with ignore_exception(Exception):
+         stats.update({"[Users] Total users": CLIENT[defaultdb["dbname"]][defaultdb["userscoll"]].find({}).count()})
+-    with ignore_excpetion(Exception):
++    with ignore_exception(Exception):
+         total, used, free = disk_usage("/")
+         stats.update({"CPU memory": cpu_percent(),
+                       "Memory used": virtual_memory()[2],
+@@ -1717,7 +1717,6 @@ def get_stats():
+                       "Used disk size": "{}".format(convert_size(used)),
+                       "Free disk size": "{}".format(convert_size(free)),
+                       "Host platform": pplatform()})
+-    CLIENT.close()
+     return stats
+ 
+ 
+@@ -1846,23 +1845,7 @@ class CheckTask(BaseView):
+         return redirect(url_for('admin.login_view', next=request.url))
+ 
+ 
+-class SendLogs(BaseView):
+-    '''
+-    Send logs (This acts as api)
+-    '''
+-    @CSRF.exempt
+-    @expose('/', methods=['POST', 'GET'])
+-    def index(self):
+-        '''
+-        Add logs
+-        '''
+-        file = request.files.get('file')
+ 
+-    def is_visible(self):
+-        '''
+-        not visable in the bar (just an api)
+-        '''
+-        return False
+ 
+ 
+ class TimeEncoder(JSONEncoder):
+@@ -1942,7 +1925,7 @@ ADMIN.add_view(CustomLogsView(name="Active", endpoint='activelogs', menu_icon_ty
+ ADMIN.add_view(CustomStatsView(name="Stats", endpoint='stats', menu_icon_type='glyph', menu_icon_value='glyphicon-stats'))
+ ADMIN.add_view(UserView(User, menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
+ ADMIN.add_view(CheckTask('Task', endpoint='task', menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
+-#ADMIN.add_view(SendLogs('Send', endpoint='send', menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
++
+ #app.run(host = "127.0.0.1", ssl_context=(certsdir+'cert.pem', certsdir+'key.pem'))
+ #app.run(host = "127.0.0.1", port= "8001", debug=True)
+ 

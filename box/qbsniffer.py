@@ -3,18 +3,16 @@
     box -> sniffer
 '''
 
-from scapy.all import *
+from scapy.all import Ether, conf, get_if_hwaddr, sniff
 from sys import stdout
 from binascii import hexlify
 from netifaces import ifaddresses, AF_INET, AF_LINK
-from binascii import hexlify
 from multiprocessing import Process
 from re import search as rsearch
 from re import compile as rcompile
 from logging import DEBUG, basicConfig, getLogger, FileHandler
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
-from multiprocessing import Process
 from json import JSONEncoder, dump as jdump, dumps as jdumps, loads as jloads
 
 

@@ -11,7 +11,7 @@ from datetime import datetime
 from tinydb import TinyDB, Query
 from binascii import unhexlify
 from jinja2 import Template, Environment, FileSystemLoader
-from shared.logger import log_string, ignore_excpetion
+from shared.logger import log_string, ignore_exception
 from shared.settings import defaultdb
 from shared.mongodbconn import add_item_fs, find_item
 
@@ -163,7 +163,7 @@ def make_report(parsed):
     with open(analyzer_path) as file:
         temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], file.read(), parsed['task'], None, parsed['task'], "application/json", datetime.now())
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         screenshot_table = analyzer_db.table('screenshot_table')
         item = screenshot_table.search(lambda x: x if 'normal_image' in x else 0)
         if item:
@@ -172,7 +172,7 @@ def make_report(parsed):
             table += make_image_table_base64(ENV_JINJA2, img_base64, "Screenshot")
             log_string("Parsed normal screenshot", task=parsed['task'])
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         screenshot_table = analyzer_db.table('screenshot_table')
         item = screenshot_table.search(lambda x: x if 'full_image' in x else 0)
         if item:
@@ -181,7 +181,7 @@ def make_report(parsed):
             table += make_image_table_base64(ENV_JINJA2, img_base64, "Full Screenshot")
             log_string("Parsed full screenshot", task=parsed['task'])
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         network_table = analyzer_db.table('network_table')
         item = network_table.search(lambda x: x if 'circular_layout' in x else 0)
         if item:
@@ -190,54 +190,54 @@ def make_report(parsed):
             table += make_image_table_base64(ENV_JINJA2, img_base64, "Network Graph")
             log_string("Parsed Network Graph", task=parsed['task'])
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         words_table = analyzer_db.table('extracted_table')
         item = words_table.search(lambda x: x if 'dns_records' in x else 0)
         if item:
             table += make_json_table_no_loop(ENV_JINJA2, item[0]["dns_records"], "DNS Records")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         words_table = analyzer_db.table('extracted_table')
         item = words_table.search(lambda x: x if 'Request_Headers' in x else 0)
         if item:
             table += make_json_table_no_loop(ENV_JINJA2, item[0]["Request_Headers"], "Request Headers")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         words_table = analyzer_db.table('extracted_table')
         item = words_table.search(lambda x: x if 'Response_Headers' in x else 0)
         if item:
             table += make_json_table_no_loop(ENV_JINJA2, item[0]["Response_Headers"], "Response Headers")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         words_table = analyzer_db.table('extracted_table')
         item = words_table.search(lambda x: x if 'Certificate' in x else 0)
         if item:
             table += make_json_table_no_loop(ENV_JINJA2, item[0]["Certificate"], "Certificate")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         words_table = analyzer_db.table('words_table')
         item = words_table.search(lambda x: x if 'all_words' in x else 0)
         if item:
             table += make_json_table_no_loop(ENV_JINJA2, item, "OCR Words")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         extracted_table = analyzer_db.table('extracted_table')
         item = extracted_table.search(lambda x: x if 'extracted_links' in x else 0)
         if item:
             table += make_json_table_no_loop(ENV_JINJA2, item[0]["extracted_links"], "Extracted links")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         extracted_table = analyzer_db.table('extracted_table')
         item = extracted_table.search(lambda x: x if 'extracted_scripts' in x else 0)
         if item:
             table += make_json_table_no_loop(ENV_JINJA2, item[0]["extracted_scripts"], "Extracted scripts")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         analyzer_table = analyzer_db.table('analyzer_table')
         if len(analyzer_table.all()) > 0:
             table += make_json_table(ENV_JINJA2, analyzer_table.all(), "Browser")
 
-    with ignore_excpetion():
+    with ignore_exception(Exception):
         sniffer_table = sniffer_db.table('sniffer_table')
         if len(sniffer_table.all()) > 0:
             table += make_json_table_no_loop(ENV_JINJA2, sniffer_table.all(), "Sniffer")

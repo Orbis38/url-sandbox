@@ -36,7 +36,7 @@ from bs4 import BeautifulSoup
 from validator_collection import validators, checkers
 from werkzeug.exceptions import HTTPException, default_exceptions
 from shared.settings import defaultdb, json_settings, meta_files_settings, meta_reports_settings, meta_task_files_logs_settings, meta_users_settings, meta_task_logs_settings
-from shared.logger import ignore_excpetion
+from shared.logger import ignore_exception
 from shared.mongodbconn import CLIENT, get_it_fs
 
 SWITCHES = [('full_analysis', 'full analysis'), ('use_proxy', 'use proxy'), ('no_redirect', 'no redirect'), ('random_click', 'random click'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on')]
@@ -1580,7 +1580,7 @@ class CustomAdminIndexView(AdminIndexView):
         '''
         toggled route (this will keep track of toggled items)
         '''
-        with ignore_excpetion(Exception):
+        with ignore_exception(Exception):
             if current_user.is_authenticated:
                 json_content = request.get_json(silent=True)
                 for key, value in json_content.items():
@@ -1693,22 +1693,22 @@ def get_stats():
     get stats from databases
     '''
     stats = {}
-    with ignore_excpetion(Exception):
+    with ignore_exception(Exception):
         for coll in (defaultdb["reportscoll"], defaultdb["filescoll"], "fs.chunks", "fs.files"):
             if coll in CLIENT[defaultdb["dbname"]].list_collection_names():
                 stats.update({"[{}] Collection".format(coll): "Exists"})
             else:
                 stats.update({"[{}] Collection".format(coll): "Does not exists"})
-    with ignore_excpetion(Exception):
+    with ignore_exception(Exception):
         stats.update({"[Reports] Total reports": CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].find({}).count(),
                       "[Reports] Total used space": "{}".format(convert_size(CLIENT[defaultdb["dbname"]].command("collstats", defaultdb["reportscoll"])["storageSize"] + CLIENT[defaultdb["dbname"]].command("collstats", defaultdb["reportscoll"])["totalIndexSize"]))})
-    with ignore_excpetion(Exception):
+    with ignore_exception(Exception):
         stats.update({"[Files] Total files uploaded": CLIENT[defaultdb["dbname"]][defaultdb["filescoll"]].find({}).count()})
-    with ignore_excpetion(Exception):
+    with ignore_exception(Exception):
         stats.update({"[Files] Total uploaded files size": "{}".format(convert_size(CLIENT[defaultdb["dbname"]]["fs.chunks"].find().count() * 255 * 1000))})
-    with ignore_excpetion(Exception):
+    with ignore_exception(Exception):
         stats.update({"[Users] Total users": CLIENT[defaultdb["dbname"]][defaultdb["userscoll"]].find({}).count()})
-    with ignore_excpetion(Exception):
+    with ignore_exception(Exception):
         total, used, free = disk_usage("/")
         stats.update({"CPU memory": cpu_percent(),
                       "Memory used": virtual_memory()[2],
@@ -1717,7 +1717,6 @@ def get_stats():
                       "Used disk size": "{}".format(convert_size(used)),
                       "Free disk size": "{}".format(convert_size(free)),
                       "Host platform": pplatform()})
-    CLIENT.close()
     return stats
 
 
@@ -1846,23 +1845,7 @@ class CheckTask(BaseView):
         return redirect(url_for('admin.login_view', next=request.url))
 
 
-class SendLogs(BaseView):
-    '''
-    Send logs (This acts as api)
-    '''
-    @CSRF.exempt
-    @expose('/', methods=['POST', 'GET'])
-    def index(self):
-        '''
-        Add logs
-        '''
-        file = request.files.get('file')
 
-    def is_visible(self):
-        '''
-        not visable in the bar (just an api)
-        '''
-        return False
 
 
 class TimeEncoder(JSONEncoder):
@@ -1942,7 +1925,7 @@ ADMIN.add_view(CustomLogsView(name="Active", endpoint='activelogs', menu_icon_ty
 ADMIN.add_view(CustomStatsView(name="Stats", endpoint='stats', menu_icon_type='glyph', menu_icon_value='glyphicon-stats'))
 ADMIN.add_view(UserView(User, menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
 ADMIN.add_view(CheckTask('Task', endpoint='task', menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
-#ADMIN.add_view(SendLogs('Send', endpoint='send', menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
+
 #app.run(host = "127.0.0.1", ssl_context=(certsdir+'cert.pem', certsdir+'key.pem'))
 #app.run(host = "127.0.0.1", port= "8001", debug=True)
 

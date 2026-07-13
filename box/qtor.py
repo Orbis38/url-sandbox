@@ -3,7 +3,7 @@
     box -> qtor
 '''
 
-from subprocess import Popen, PIPE, check_output
+from subprocess import Popen, PIPE, check_output, DEVNULL
 from shutil import copyfile
 from os import remove
 from time import sleep
@@ -11,7 +11,7 @@ from time import sleep
 
 class Connection():
     def start_supervisord(self):
-        Popen("supervisord >/dev/null 2>&1", shell=True)
+        Popen(["supervisord"], stdout=DEVNULL, stderr=DEVNULL)
         sleep(3)
 
     def delete_tor_file(self):
@@ -55,13 +55,13 @@ iptables -A OUTPUT -j REJECT'''
         return "Done"
 
     def kill_tor(self):
-        process = Popen("supervisorctl stop tor > /dev/null 2>&1", shell=True)
-        out, err = process.communicate()
+        process = Popen(["supervisorctl", "stop", "tor"], stdout=DEVNULL, stderr=DEVNULL)
+        process.communicate()
         return "Done"
 
     def start_tor(self):
-        process = Popen("supervisorctl start tor > /dev/null 2>&1", shell=True)
-        out, err = process.communicate()
+        process = Popen(["supervisorctl", "start", "tor"], stdout=DEVNULL, stderr=DEVNULL)
+        process.communicate()
         ret = False
         print("[>] Waiting on Tor..")
         for x in range(0, 10):

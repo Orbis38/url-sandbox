@@ -10,14 +10,14 @@ from shutil import rmtree
 from types import FunctionType
 from docker import from_env
 from binascii import hexlify
-from pickle import dumps as pdumps
+from json import dumps as jdumps
 from jinja2 import Template
 from celery import Celery
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from tldextract import extract as textract
 from qbreport import make_report
 from shared.settings import json_settings
-from shared.logger import log_string, setup_task_logger, ignore_excpetion, cancel_task_logger
+from shared.logger import log_string, setup_task_logger, ignore_exception, cancel_task_logger
 
 DOCKER_CLIENT = from_env()
 CELERY = Celery(json_settings[environ["project_env"]]["celery_settings"]["name"],
@@ -54,10 +54,10 @@ def analyze_url(self, parsed):
         parsed['locations'] = json_settings[environ["project_env"]]["task_logs"]
         if parsed['use_proxy']:
             log_string("Proxy detected", task=parsed['task'])
-            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(pdumps(parsed)).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box")
+            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box")
         else:
             log_string("No proxy, running privileged for custom tor config", task=parsed['task'])
-            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(pdumps(parsed)).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", privileged=True)
+            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", privileged=True)
         temp_logs = ""
         for item in range(1, parsed['analyzer_timeout']):
             temp_logs = temp_container.logs()
@@ -68,7 +68,7 @@ def analyze_url(self, parsed):
         temp_container.stop()
         if len(temp_logs) > 0:
             for item in temp_logs.split(b"\n"):
-                with ignore_excpetion():
+                with ignore_exception(Exception):
                     if len(item) > 0:
                         log_string(item.decode("utf-8"), task=parsed['task'])
         log_string("Parsing output", task=parsed['task'])

@@ -35,9 +35,9 @@ RED_ARROW = '{}{}{}'.format(TerminalColors.Red, ">", TerminalColors.Restore)
 
 
 @contextmanager
-def ignore_excpetion(*exceptions):
+def ignore_exception(*exceptions):
     '''
-    catch excpetion
+    catch exception
     '''
     try:
         yield
@@ -48,7 +48,8 @@ def ignore_excpetion(*exceptions):
 
 def combine_2_dict(a, b):
     z = a.copy()
-    return z.update(b)
+    z.update(b)
+    return z
 
 
 def setup_task_logger(parsed):
