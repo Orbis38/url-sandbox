@@ -1,9 +1,9 @@
-importlib-metadata==4.13.0
+importlib-metadata>=4.13.0
 requests
 flask
 werkzeug
 gunicorn
-pymongo==3.12.1
+pymongo==3.12.3
 flask_mongoengine
 flask_admin
 flask_login

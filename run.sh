@@ -9,22 +9,47 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 setup_requirements () {
-	apt update -y
-	if ! command -v docker &> /dev/null
-	then
-			echo "Installing Docker"
-			apt install -y linux-headers-$(uname -r) docker.io
+	if [ -x "$(command -v apt)" ]; then
+		apt update -y
+		if ! command -v docker &> /dev/null
+		then
+				echo "Installing Docker"
+				apt install -y linux-headers-$(uname -r) docker.io
+				systemctl start docker
+				systemctl enable docker
+		fi
+		if ! command -v jq &> /dev/null
+		then
+				echo "Installing jq"
+				apt install -y jq
+		fi
+		if ! command -v xdg-open &> /dev/null
+		then
+				echo "Installing xdg-utils"
+				apt install -y xdg-open
+		fi
+	elif [ -x "$(command -v dnf)" ]; then
+		if ! command -v docker &> /dev/null
+		then
+				echo "Installing Docker (moby-engine)"
+				dnf install -y kernel-devel moby-engine
+				systemctl start docker
+				systemctl enable docker
+		fi
+		if ! command -v jq &> /dev/null
+		then
+				echo "Installing jq"
+				dnf install -y jq
+		fi
+		if ! command -v xdg-open &> /dev/null
+		then
+				echo "Installing xdg-utils"
+				dnf install -y xdg-utils
+		fi
+	else
+		echo "Unsupported package manager. Please install docker, jq, and xdg-utils manually."
 	fi
-	if ! command -v jq &> /dev/null
-	then
-			echo "Installing jq"
-			apt install -y jq
-	fi
-	if ! command -v xdg-open &> /dev/null
-	then
-			echo "Installing xdg-utils"
-			apt install -y xdg-open
-	fi
+
 	if ! command -v docker-compose &> /dev/null
 	then
 			echo "Installing docker-compose"

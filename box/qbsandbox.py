@@ -254,7 +254,7 @@ def take_full_screen_shot(driver, screenshot_table, words_table):
     this function needs checking
     '''
     try:
-        element = driver.find_element_by_tag_name('html')
+        element = driver.find_element(By.TAG_NAME, 'html')
         screenshot = element.get_screenshot_as_png()
         screenshot_table.insert({'full_image': hexlify(screenshot).decode('utf-8')})
         print("[SandBox] Screenshot saved")
@@ -319,9 +319,8 @@ def chrome_driver(parsed, analyzer_db):
     if parsed['use_proxy']:
         chrome_options.add_argument('--proxy-server=%s' % parsed['proxy'])
     chrome_options.binary_location = "/usr/bin/google-chrome"
-    d = DesiredCapabilities.CHROME
-    d["goog:loggingPrefs"] = {"performance": "ALL"}
-    chromebrowser = webdriver.Chrome(chrome_options=chrome_options, desired_capabilities=d)
+    chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+    chromebrowser = webdriver.Chrome(options=chrome_options)
     if parsed["no_redirect"]:
         chromebrowser.implicitly_wait(0.1)
         try:

@@ -16,14 +16,14 @@ def update_task(database_name, collection_name, task, log):
     '''
     simple item update
     '''
-    CLIENT[database_name][collection_name].update({'task': task}, {'$push': {'logs': log}}, upsert=True)
+    CLIENT[database_name][collection_name].update_one({'task': task}, {'$push': {'logs': log}}, upsert=True)
 
 
 def update_task_by_uuid(database_name, collection_name, task, _set):
     '''
     simple item update
     '''
-    CLIENT[database_name][collection_name].update({'task': task}, {'$set': _set})
+    CLIENT[database_name][collection_name].update_one({'task': task}, {'$set': _set})
 
 
 def update_item(database_name, collection_name, _id, _set):

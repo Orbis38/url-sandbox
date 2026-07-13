@@ -1,6 +1,6 @@
-FROM python:3.7
+FROM python:3.11-slim
 ENV DEBIAN_FRONTEND noninteractive
 COPY backend-requirements.txt .
-RUN pip install -r backend-requirements.txt --use-deprecated=legacy-resolver
+RUN pip install -r backend-requirements.txt
 ADD ./backend ./backend
 WORKDIR backend
