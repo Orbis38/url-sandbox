@@ -32,7 +32,7 @@ setup_requirements () {
 		if ! command -v docker &> /dev/null
 		then
 				echo "Installing Docker (moby-engine)"
-				dnf install -y kernel-devel moby-engine
+				dnf install -y kernel-devel moby-engine runc
 				systemctl start docker
 				systemctl enable docker
 		fi

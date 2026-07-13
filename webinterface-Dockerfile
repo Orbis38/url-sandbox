@@ -1,5 +1,6 @@
 FROM python:3.11-slim
 ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update && apt-get install -y build-essential
 COPY webinterface-requirements.txt .
 RUN pip3 install -r webinterface-requirements.txt
 ADD ./website ./website

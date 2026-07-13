@@ -15,8 +15,7 @@ services:
       - frontend
       - backend
     volumes:
-      - ./shared:/website/shared
-      - /etc/timezone:/etc/timezone:ro
+      - ./shared:/website/shared:z
       - /etc/localtime:/etc/localtime:ro
     healthcheck:
       disable: true 
@@ -41,7 +40,6 @@ services:
     volumes:
       - /tmp/urlsandbox/logs:/tmp/urlsandbox/logs/
       - /tmp/urlsandbox/output:/tmp/urlsandbox/output/
-      - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
       - ./shared:/backend/shared
       - /usr/bin/docker:/usr/bin/docker
@@ -56,7 +54,6 @@ services:
     networks:
       - frontend_box
     volumes:
-      - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
 
   box:
@@ -66,7 +63,6 @@ services:
     networks:
       - frontend_box
     volumes:
-      - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
     logging:
       driver: none
@@ -93,7 +89,6 @@ services:
       - backend
       - frontend
     volumes:
-      - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
     environment:
       MONGO_INITDB_ROOT_USERNAME: changeme_9620eh26sfvka017fx

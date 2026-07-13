@@ -3,7 +3,7 @@ ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update && apt-get install -y curl unzip wget jq xvfb firefox-esr tor iptables-persistent iptables net-tools supervisor tcpdump libtesseract-dev libleptonica-dev tesseract-ocr
+RUN apt-get update && apt-get install -y build-essential curl unzip wget jq xvfb firefox-esr tor iptables-persistent iptables net-tools supervisor tcpdump libtesseract-dev libleptonica-dev tesseract-ocr
 COPY box-requirements.txt .
 RUN pip install -r box-requirements.txt
 RUN CHROME=google-chrome.deb && \

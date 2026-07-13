@@ -1,11 +1,11 @@
 importlib-metadata>=4.13.0
 requests
-flask
-werkzeug
+flask==2.2.5
+werkzeug==2.2.3
 gunicorn
 pymongo==3.12.3
 flask_mongoengine
-flask_admin
+flask-admin==1.6.1
 flask_login
 flask_bcrypt
 pyOpenSSL
