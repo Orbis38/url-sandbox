@@ -59,13 +59,44 @@ def analyze_url(self, parsed):
             log_string("No proxy, running privileged for custom tor config", task=parsed['task'])
             temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", privileged=True)
         temp_logs = ""
-        for item in range(1, parsed['analyzer_timeout']):
-            temp_logs = temp_container.logs()
-            if len(temp_logs) > 1:
-                if temp_logs.endswith(b"Done!!\n"):
+        if parsed.get('interactive'):
+            log_string("Interactive mode requested. Waiting for socket...", task=parsed['task'])
+            socket_path = path.join(json_settings[environ["project_env"]]["output_folder"], parsed['task'], "control.sock")
+            ready = False
+            for item in range(1, parsed['analyzer_timeout']):
+                try:
+                    temp_container.reload()
+                    if temp_container.status == 'exited':
+                        log_string("Container exited prematurely", task=parsed['task'])
+                        break
+                except Exception:
+                    pass
+                if path.exists(socket_path):
+                    ready = True
                     break
-            sleep(1)
-        temp_container.stop()
+                sleep(1)
+            if ready:
+                log_string("Interactive socket is ready!", task=parsed['task'])
+            else:
+                log_string("Interactive socket startup timed out", task=parsed['task'])
+                try:
+                    temp_container.stop()
+                    temp_container.remove()
+                except Exception:
+                    pass
+                temp_container = None
+        else:
+            for item in range(1, parsed['analyzer_timeout']):
+                temp_logs = temp_container.logs()
+                if len(temp_logs) > 1:
+                    if temp_logs.endswith(b"Done!!\n"):
+                        break
+                sleep(1)
+            try:
+                temp_container.stop()
+            except Exception:
+                pass
+
         if len(temp_logs) > 0:
             for item in temp_logs.split(b"\n"):
                 with ignore_exception(Exception):
@@ -75,12 +106,23 @@ def analyze_url(self, parsed):
         parsed['locations']['box_output'] = json_settings[environ["project_env"]]["output_folder"]
     except Exception as e:
         log_string("Error -> {}".format(e), task=parsed['task'])
+        if temp_container is not None:
+            try:
+                temp_container.stop()
+                temp_container.remove()
+            except Exception:
+                pass
+            temp_container = None
     # clean_up()
     try:
-        if temp_container is not None:
+        if temp_container is not None and not parsed.get('interactive'):
             temp_container.stop()
             temp_container.remove()
     except Exception as e:
         log_string("Error -> {}".format(e), task=parsed['task'])
-    make_report(parsed)
+    parsed['locations']['box_output'] = json_settings[environ["project_env"]]["output_folder"]
+    try:
+        make_report(parsed)
+    except Exception as e:
+        log_string("Report error -> {}".format(e), task=parsed['task'])
     cancel_task_logger(parsed['task'])

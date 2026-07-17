@@ -242,6 +242,125 @@ def make_report(parsed):
         if len(sniffer_table.all()) > 0:
             table += make_json_table_no_loop(ENV_JINJA2, sniffer_table.all(), "Sniffer")
 
+    if parsed.get('interactive'):
+        table += """
+        <div class="card new_card" id="interactive-panel" style="margin-top: 20px; border: 1px solid #ffbb47; background-color: #2b2c2c;">
+            <div class="card-header" style="background-color: #2b2c2c; color: #ffbb47; font-weight: bold; padding: 10px 20px;">
+                Interactive Session Control
+            </div>
+            <div class="card-body" style="padding: 20px;">
+                <p><strong>Interactive mode is active!</strong></p>
+                <ul>
+                    <li>Click anywhere on the screenshot below to simulate a click at that position.</li>
+                    <li>Use the buttons below to scroll up or down.</li>
+                </ul>
+                <div style="margin-bottom: 15px;">
+                    <button class="btn btn-warning btn-sm" onclick="scrollLive(-300)" style="background-color: #ffbb47; color: black; border: none; padding: 5px 10px; margin-right: 5px;">Scroll Up ↑</button>
+                    <button class="btn btn-warning btn-sm" onclick="scrollLive(300)" style="background-color: #ffbb47; color: black; border: none; padding: 5px 10px;">Scroll Down ↓</button>
+                </div>
+                <div id="interaction-status" style="font-style: italic; color: #ffbb47; min-height: 20px;"></div>
+            </div>
+        </div>
+        
+        <script>
+            $(document).ready(function() {
+                $('.table-Screenshot').show();
+                
+                var normalImg = $('.table-Screenshot img');
+                if (normalImg.length) {
+                    normalImg.attr('id', 'live-screenshot');
+                    normalImg.css({
+                        'cursor': 'crosshair',
+                        'border': '2px solid #ffbb47',
+                        'max-width': '800px',
+                        'display': 'block'
+                    });
+                    
+                    normalImg.on('click', function(e) {
+                        var rect = this.getBoundingClientRect();
+                        var x = e.clientX - rect.left;
+                        var y = e.clientY - rect.top;
+                        
+                        var displayWidth = rect.width;
+                        var displayHeight = rect.height;
+
+                        var naturalWidth = this.naturalWidth || 800;
+                        var naturalHeight = this.naturalHeight || 600;
+
+                        var clickX = Math.round((x / displayWidth) * naturalWidth);
+                        var clickY = Math.round((y / displayHeight) * naturalHeight);
+
+                        sendAction('click', { x: clickX, y: clickY, is_full: false });
+                    });
+                }
+                
+                var fullImg = $('.table-Full_Screenshot img');
+                if (fullImg.length) {
+                    fullImg.attr('id', 'live-full-screenshot');
+                    fullImg.css({
+                        'cursor': 'crosshair',
+                        'border': '2px solid #ffbb47',
+                        'max-width': '800px',
+                        'display': 'block'
+                    });
+                    
+                    fullImg.on('click', function(e) {
+                        var rect = this.getBoundingClientRect();
+                        var x = e.clientX - rect.left;
+                        var y = e.clientY - rect.top;
+                        
+                        var displayWidth = rect.width;
+                        var displayHeight = rect.height;
+                        
+                        var naturalWidth = this.naturalWidth || 800;
+                        var naturalHeight = this.naturalHeight || 600;
+                        
+                        var clickX = Math.round((x / displayWidth) * naturalWidth);
+                        var clickY = Math.round((y / displayHeight) * naturalHeight);
+                        
+                        sendAction('click', { x: clickX, y: clickY, is_full: true });
+                    });
+                }
+            });
+            
+            function scrollLive(amount) {
+                sendAction('scroll', { amount: amount });
+            }
+            
+            function sendAction(action, params) {
+                var statusDiv = $('#interaction-status');
+                statusDiv.text('Sending ' + action + ' action...');
+                
+                var data = $.extend({ action: action }, params);
+                
+                $.ajax({
+                    url: '/live_interact/""" + parsed['task'] + """',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(data),
+                    success: function(response) {
+                        if (response.status === 'ok') {
+                            if (response.screenshot) {
+                                $('#live-screenshot').attr('src', 'data:image/jpeg;base64, ' + response.screenshot);
+                            }
+                            if (response.full_screenshot) {
+                                $('#live-full-screenshot').attr('src', 'data:image/jpeg;base64, ' + response.full_screenshot);
+                            }
+                            statusDiv.text('Action executed successfully.');
+                            setTimeout(function() { statusDiv.text(''); }, 2000);
+                        } else {
+                            statusDiv.text('Error: ' + (response.error || 'unknown error'));
+                        }
+                    },
+                    error: function(xhr) {
+                        var err = xhr.responseJSON ? xhr.responseJSON.error : 'Connection error';
+                        statusDiv.text('Error: ' + err);
+                    }
+                });
+            }
+        </script>
+        """
+
     all_logs = find_item(defaultdb["dbname"], defaultdb["taskdblogscoll"], {'task': parsed['task']})
     if all_logs:
         full_table = make_text_table(ENV_JINJA2, all_logs['logs'], "Logs")

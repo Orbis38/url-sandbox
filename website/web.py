@@ -39,7 +39,7 @@ from shared.settings import defaultdb, json_settings, meta_files_settings, meta_
 from shared.logger import ignore_exception
 from shared.mongodbconn import CLIENT, get_it_fs
 
-SWITCHES = [('full_analysis', 'full analysis'), ('use_proxy', 'use proxy'), ('no_redirect', 'no redirect'), ('random_click', 'random click'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on')]
+SWITCHES = [('full_analysis', 'full analysis'), ('use_proxy', 'use proxy'), ('no_redirect', 'no redirect'), ('random_click', 'random click'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on'), ('interactive', 'interactive mode')]
 
 SWITCHES_MAPPED = {
     '!Susie': '!Susie (http://www.sync2it.com/susie)',
@@ -1843,6 +1843,80 @@ class CheckTask(BaseView):
         if not accessible then go to login
         '''
         return redirect(url_for('admin.login_view', next=request.url))
+
+
+def update_gridfs_report(task_id, new_screenshot_base64, new_full_screenshot_base64=None):
+    try:
+        report_doc = CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].find_one({"task": task_id, "type": "text/html"})
+        if report_doc:
+            old_file_id = report_doc["file"]
+            html_content = get_it_fs(defaultdb["dbname"], {"_id": old_file_id})
+            if html_content:
+                soup = BeautifulSoup(html_content, 'html.parser')
+                
+                # Update normal viewport screenshot
+                tbody = soup.find('tbody', class_='table-Screenshot')
+                if tbody:
+                    img = tbody.find('img', class_='fullsize')
+                    if img:
+                        img['src'] = "data:image/jpeg;base64, " + new_screenshot_base64
+                        
+                # Update full page screenshot if it is provided
+                if new_full_screenshot_base64:
+                    full_tbody = soup.find('tbody', class_='table-Full_Screenshot')
+                    if full_tbody:
+                        full_img = full_tbody.find('img', class_='fullsize')
+                        if full_img:
+                            full_img['src'] = "data:image/jpeg;base64, " + new_full_screenshot_base64
+                        
+                from gridfs import GridFS
+                fs = GridFS(CLIENT[defaultdb["dbname"]])
+                fs.delete(old_file_id)
+                new_file_id = fs.put(str(soup).encode('utf-8'), filename=task_id, task=task_id, content_type="text/html")
+                CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].update_one({"_id": report_doc["_id"]}, {"$set": {"file": new_file_id}})
+    except Exception as e:
+        print(f"Error updating GridFS report: {e}", flush=True)
+
+
+@APP.route('/live_interact/<task_id>', methods=['POST'])
+@CSRF.exempt
+def live_interact(task_id):
+    if not current_user.is_authenticated:
+        return jsonify(error="Unauthorized"), 401
+        
+    json_content = request.get_json(silent=True) or {}
+    
+    socket_path = path.join(json_settings[environ["project_env"]]["output_folder"], task_id, "control.sock")
+    if not path.exists(socket_path):
+        return jsonify(error="Session not active or socket not found"), 404
+        
+    import socket
+    import json
+    try:
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.connect(socket_path)
+        client.sendall(json.dumps(json_content).encode('utf-8'))
+        
+        response_data = b""
+        while True:
+            chunk = client.recv(4096)
+            if not chunk:
+                break
+            response_data += chunk
+        client.close()
+        
+        res = json.loads(response_data.decode('utf-8'))
+        if res.get('status') == 'ok':
+            new_screenshot = res.get('screenshot')
+            new_full_screenshot = res.get('full_screenshot')
+            if new_screenshot:
+                update_gridfs_report(task_id, new_screenshot, new_full_screenshot)
+            return jsonify(res)
+        else:
+            return jsonify(error=res.get('message', 'Error from sandbox')), 500
+    except Exception as e:
+        return jsonify(error=f"Connection error: {str(e)}"), 500
+
 
 
 

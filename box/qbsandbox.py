@@ -323,6 +323,7 @@ def chrome_driver(parsed, analyzer_db):
     chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     service = Service(executable_path="/usr/bin/chromedriver")
     chromebrowser = webdriver.Chrome(options=chrome_options, service=service)
+    chromebrowser.set_window_size(800, 600)
     if parsed["no_redirect"]:
         chromebrowser.implicitly_wait(0.1)
         try:
@@ -345,6 +346,162 @@ def chrome_driver(parsed, analyzer_db):
     take_normal_screen_shot(chromebrowser, screenshot_table, words_table)
     parse_ouput(performance_logs, analyzer_table)
     make_network(analyzer_table, network_table)
+    if parsed.get('interactive'):
+        start_interactive_server(chromebrowser, parsed, analyzer_db)
     chromebrowser.quit()
     DISPLAY.stop()
     print("[SandBox] main logic done")
+
+
+def start_interactive_server(driver, parsed, analyzer_db):
+    import socket
+    import os
+    import json
+    import time
+    from base64 import b64encode
+    
+    task_id = parsed['task']
+    socket_dir = os.path.join(parsed['locations']['box_output'], task_id)
+    if not os.path.exists(socket_dir):
+        os.makedirs(socket_dir, exist_ok=True)
+    socket_path = os.path.join(socket_dir, "control.sock")
+    
+    if os.path.exists(socket_path):
+        try:
+            os.remove(socket_path)
+        except Exception:
+            pass
+            
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(socket_path)
+    server.listen(1)
+    server.settimeout(300.0)
+    
+    print(f"[SandBox] Interactive Unix socket server listening at {socket_path}", flush=True)
+    screenshot_table = analyzer_db.table('screenshot_table')
+    last_interaction_time = time.time()
+    
+    while True:
+        try:
+            if time.time() - last_interaction_time > 300:
+                print("[SandBox] Interactive session timed out.", flush=True)
+                break
+                
+            server.settimeout(max(1.0, 300.0 - (time.time() - last_interaction_time)))
+            try:
+                conn, addr = server.accept()
+            except socket.timeout:
+                continue
+                
+            conn.settimeout(10.0)
+            data = conn.recv(4096)
+            if not data:
+                conn.close()
+                continue
+                
+            try:
+                req = json.loads(data.decode('utf-8'))
+                action = req.get('action')
+                print(f"[SandBox] Received action: {action}", flush=True)
+                
+                if action == 'click':
+                    x = int(req.get('x', 0))
+                    y = int(req.get('y', 0))
+                    is_full = req.get('is_full', False)
+                    
+                    if is_full:
+                        scroll_y = max(0, y - 300)
+                        driver.execute_script("window.scrollTo(0, arguments[0]);", scroll_y)
+                        time.sleep(0.2)
+                        actual_y = y - driver.execute_script("return window.pageYOffset;")
+                        actual_x = x
+                    else:
+                        actual_x = x
+                        actual_y = y
+                        
+                    viewport = driver.execute_script(
+                        "return [window.innerWidth, window.innerHeight];")
+                    actual_x = max(0, min(actual_x, viewport[0] - 1))
+                    actual_y = max(0, min(actual_y, viewport[1] - 1))
+
+                    print(f"[SandBox] Dispatching mouse click at ({actual_x}, {actual_y})", flush=True)
+                    try:
+                        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                            "type": "mouseMoved",
+                            "x": actual_x, "y": actual_y})
+                        time.sleep(0.1)
+                        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                            "type": "mousePressed",
+                            "x": actual_x, "y": actual_y,
+                            "button": "left", "clickCount": 1})
+                        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                            "type": "mouseReleased",
+                            "x": actual_x, "y": actual_y,
+                            "button": "left", "clickCount": 1})
+                    except Exception as e:
+                        print(f"[SandBox] CDP click failed: {e}", flush=True)
+                    time.sleep(1.0)
+                    
+                elif action == 'scroll':
+                    amount = int(req.get('amount', 0))
+                    driver.execute_script("window.scrollBy(0, arguments[0]);", amount)
+                    time.sleep(0.2)
+                    
+                elif action == 'close':
+                    print("[SandBox] Close requested. Shutting down interactive server.", flush=True)
+                    conn.sendall(json.dumps({"status": "ok", "message": "closed"}).encode('utf-8'))
+                    conn.close()
+                    break
+                    
+                screenshot = driver.get_screenshot_as_png()
+                screenshot_table.truncate()
+                
+                take_full = parsed.get('take_full_screenshot', False)
+                full_img_base64 = None
+                
+                if take_full:
+                    try:
+                        element = driver.find_element(By.TAG_NAME, 'html')
+                        full_screenshot = element.get_screenshot_as_png()
+                        screenshot_table.insert({
+                            'normal_image': hexlify(screenshot).decode('utf-8'),
+                            'full_image': hexlify(full_screenshot).decode('utf-8')
+                        })
+                        full_img_base64 = b64encode(full_screenshot).decode('utf-8')
+                    except Exception as fe:
+                        print(f"[SandBox] Interactive full screenshot failed: {fe}", flush=True)
+                        screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                else:
+                    screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                
+                img_base64 = b64encode(screenshot).decode('utf-8')
+                response = {
+                    "status": "ok",
+                    "screenshot": img_base64
+                }
+                if full_img_base64:
+                    response["full_screenshot"] = full_img_base64
+                    
+                conn.sendall(json.dumps(response).encode('utf-8'))
+                last_interaction_time = time.time()
+                
+            except Exception as ex:
+                print(f"[SandBox] Error processing request: {ex}", flush=True)
+                try:
+                    conn.sendall(json.dumps({"status": "error", "message": str(ex)}).encode('utf-8'))
+                except:
+                    pass
+            finally:
+                conn.close()
+                
+        except Exception as e:
+            print(f"[SandBox] Socket server exception: {e}", flush=True)
+            break
+            
+    server.close()
+    if os.path.exists(socket_path):
+        try:
+            os.remove(socket_path)
+        except Exception:
+            pass
+    print("[SandBox] Interactive socket server stopped.", flush=True)
