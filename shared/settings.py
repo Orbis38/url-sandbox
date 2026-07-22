@@ -37,7 +37,7 @@ json_settings = {
             "analyzer_logs": "-analyzer.logs",
         },
         "worker": {
-            "task_time_limit": 130,
+            "task_time_limit": 300,
             "name": "analyze_url",
             "queue": "analyze_url_queue"
         }

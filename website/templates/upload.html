@@ -1,28 +1,111 @@
 {% extends 'admin/master.html' %}
 {% block body %}
 {{ super() }}
-<div class="col-lg-4">
+{% set switch_desc = {
+   'full_analysis': 'Run every analysis module against the target',
+   'use_proxy': 'Route resolution and traffic through the internal proxy',
+   'no_redirect': 'Capture the first response only, no follow-through',
+   'random_click': 'Simulate user interaction on the target page',
+   'take_full_screenshot': 'Capture a full-page screenshot of the target',
+   'sniffer_on': 'Record network traffic during sandbox execution',
+   'interactive': 'Keep the sandbox session open for manual interaction',
+   'block_cookies': 'Auto-dismiss cookie consent banners so they stay out of the screenshot'
+} %}
+<div class="up-submit-grid">
    <div class="card new_card">
       <div class="card-header">
          <div class="div-left">{{ header }}</div>
          <div class="div-right"></div>
       </div>
-      <div class="card-body width100">
+      <div class="card-body">
          <form method="POST" action="" enctype="multipart/form-data">
-            <div class="form-group center-text">
-               {% for f in form if f.type != 'CSRFTokenField' %}
-               {{ f }}
-               {% endfor %}
+            <div class="up-field-label">Target URL</div>
+            {{ form.buffer(placeholder="https://example.com") }}
+            <div class="up-divider"></div>
+            <div class="up-field-label">Execution options</div>
+            {% for subfield in form.choices %}
+            <label class="up-toggle-row">
+               <span>
+                  <span class="up-toggle-name">{{ subfield.label.text }}</span>
+                  <span class="up-toggle-desc">{{ switch_desc.get(subfield.data, '') }}</span>
+               </span>
+               {{ subfield }}
+               <span class="up-switch-track"><span class="up-switch-knob"></span></span>
+            </label>
+            {% endfor %}
+            <div class="up-divider"></div>
+            <div class="up-field-label">Advanced</div>
+            <div class="up-adv-grid">
+               <div>
+                  <div class="up-field-label">Proxy</div>
+                  {{ form.proxy }}
+               </div>
+               <div>
+                  <div class="up-field-label">User agent</div>
+                  {{ form.useragents }}
+               </div>
+               <div>
+                  <div class="up-field-label">URL timeout</div>
+                  {{ form.urltimeout }}
+               </div>
+               <div>
+                  <div class="up-field-label">Analyzer timeout</div>
+                  {{ form.analyzertimeout }}
+               </div>
+               <div>
+                  <div class="up-field-label">Interactive timeout</div>
+                  {{ form.interactivetimeout }}
+               </div>
+            </div>
+            <div class="up-actions">
+               {{ form.submit }}
+               {{ form.submitandwait }}
             </div>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
          </form>
       </div>
    </div>
-</div>
-<div class="col-lg-8">
    <div class="card new_card">
       <div class="card-header">
-         <div class="div-left">Task</div>
+         <div class="div-left">What happens next</div>
+         <div class="div-right"></div>
+      </div>
+      <div class="card-body">
+         <div class="up-step">
+            <div class="up-step-n">1</div>
+            <div>
+               <div class="up-step-title">Isolated execution</div>
+               <div class="up-step-desc">The target opens inside a disposable sandboxed browser.</div>
+            </div>
+         </div>
+         <div class="up-step">
+            <div class="up-step-n">2</div>
+            <div>
+               <div class="up-step-title">Traffic captured</div>
+               <div class="up-step-desc">DNS, headers, certificates and network calls are recorded.</div>
+            </div>
+         </div>
+         <div class="up-step">
+            <div class="up-step-n">3</div>
+            <div>
+               <div class="up-step-title">Report generated</div>
+               <div class="up-step-desc">The output is parsed and structured into useful categories.</div>
+            </div>
+         </div>
+         <div class="up-step">
+            <div class="up-step-n">4</div>
+            <div>
+               <div class="up-step-title">Report ready</div>
+               <div class="up-step-desc">The full report appears under All Reports when the task completes.</div>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
+<div class="up-result-wrap" style="display:none">
+   <div class="card new_card">
+      <div class="card-header">
+         <div class="div-left">Analysis Report</div>
          <div class="div-right"></div>
       </div>
       <div class="card-body width100 task-details">

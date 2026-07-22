@@ -19,6 +19,7 @@ function check_task(task) {
                 }, 1000)
             } else {
                  $(".task-details").html(_task);
+                 $(".up-result-wrap").show();
                  $(".waiting").toggle();
                  //$('.task-details tbody').each(function(){ $(this).toggle()});
             }

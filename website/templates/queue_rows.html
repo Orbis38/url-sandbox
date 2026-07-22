@@ -1,0 +1,18 @@
+{% for t in tasks %}
+<tr>
+   <td class="up-target" title="{{ t.target }}">{{ t.target }}</td>
+   <td>{{ t.type }}</td>
+   <td><span class="up-pill up-pill-{{ t.status }}"><span class="up-pill-dot"></span>{{ t.status|capitalize }}</span></td>
+   <td>{{ t.submitted }}</td>
+   <td>{{ t.duration }}</td>
+   <td class="up-row-actions">
+      {% if t.status == 'completed' %}
+      <a class="up-link" href="/report/{{ t.task }}" target="_blank">Report</a>
+      <a class="up-link" href="/report/{{ t.task }}/json" target="_blank">JSON</a>
+      {% endif %}
+      <a class="up-link" href="/tasklog/{{ t.task }}" target="_blank">Logs</a>
+   </td>
+</tr>
+{% else %}
+<tr><td colspan="6" class="text-center" style="color:var(--up-muted);padding:24px">No tasks yet. Start a new analysis to populate the queue.</td></tr>
+{% endfor %}

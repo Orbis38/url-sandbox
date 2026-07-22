@@ -1,0 +1,49 @@
+{% extends 'admin/master.html' %}
+{% block body %}
+{{ super() }}
+<div class="up-kpi-grid up-queue-kpis">
+   <div class="up-kpi">
+      <div class="up-kpi-label">Total analyses</div>
+      <div class="up-kpi-value" id="kpi-total">{{ kpis.total }}</div>
+   </div>
+   <div class="up-kpi">
+      <div class="up-kpi-label">Running now</div>
+      <div class="up-kpi-value" id="kpi-running" style="color:var(--up-amber)">{{ kpis.running }}</div>
+   </div>
+   <div class="up-kpi">
+      <div class="up-kpi-label">Queued</div>
+      <div class="up-kpi-value" id="kpi-queued">{{ kpis.queued }}</div>
+   </div>
+   <div class="up-kpi">
+      <div class="up-kpi-label">Completed</div>
+      <div class="up-kpi-value" id="kpi-completed" style="color:var(--up-green)">{{ kpis.completed }}</div>
+   </div>
+</div>
+<div class="up-queue-wrap">
+   <div class="card new_card">
+      <div class="card-header">
+         <div class="div-left"><span class="up-live-dot"></span>&nbsp;Task Queue &mdash; live</div>
+         <div class="div-right"></div>
+      </div>
+      <div class="card-body width100">
+         <div class="table-responsive">
+            <table class="table table-hover model-list up-queue-table">
+               <thead>
+                  <tr>
+                     <th>Target</th>
+                     <th>Type</th>
+                     <th>Status</th>
+                     <th>Submitted</th>
+                     <th>Duration</th>
+                     <th>Report &amp; Logs</th>
+                  </tr>
+               </thead>
+               <tbody id="queue-body">
+                  {% include 'queue_rows.html' %}
+               </tbody>
+            </table>
+         </div>
+      </div>
+   </div>
+</div>
+{% endblock body %}
