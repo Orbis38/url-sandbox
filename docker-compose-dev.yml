@@ -17,6 +17,7 @@ services:
     volumes:
       - ./shared:/website/shared:z
       - /etc/localtime:/etc/localtime:ro
+      - /tmp/urlsandbox/output:/tmp/urlsandbox/output:z
     healthcheck:
       disable: true 
     logging:
@@ -39,7 +40,7 @@ services:
       - frontend
     volumes:
       - /tmp/urlsandbox/logs:/tmp/urlsandbox/logs/
-      - /tmp/urlsandbox/output:/tmp/urlsandbox/output/
+      - /tmp/urlsandbox/output:/tmp/urlsandbox/output/:z
       - /etc/localtime:/etc/localtime:ro
       - ./shared:/backend/shared
       - /usr/bin/docker:/usr/bin/docker
@@ -60,6 +61,7 @@ services:
     build:
       context: .
       dockerfile: ./box-Dockerfile
+    image: url-sandbox-box
     networks:
       - frontend_box
     volumes:
@@ -104,3 +106,4 @@ networks:
     internal: true
   frontend_box:
     internal: false
+    name: url-sandbox_frontend_box

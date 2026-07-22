@@ -1,0 +1,17 @@
+{% extends 'admin/master.html' %}
+{% block body %}
+{{ super() }}
+<div class="up-report-wrap">
+   <a class="up-back" href="/queue/">&larr; Back to queue</a>
+   <div class="up-log-panel up-log-panel-static">
+      <div class="up-log-head">Task Log &mdash; {{ target }}</div>
+      <div class="up-log-lines">
+         {% for line in logs %}
+         <div class="up-log-line">{{ line }}</div>
+         {% else %}
+         <div style="color:var(--up-muted)">No log lines recorded for this task.</div>
+         {% endfor %}
+      </div>
+   </div>
+</div>
+{% endblock body %}

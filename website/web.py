@@ -39,7 +39,7 @@ from shared.settings import defaultdb, json_settings, meta_files_settings, meta_
 from shared.logger import ignore_exception
 from shared.mongodbconn import CLIENT, get_it_fs
 
-SWITCHES = [('full_analysis', 'full analysis'), ('use_proxy', 'use proxy'), ('no_redirect', 'no redirect'), ('random_click', 'random click'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on')]
+SWITCHES = [('full_analysis', 'full analysis'), ('use_proxy', 'use proxy'), ('no_redirect', 'no redirect'), ('random_click', 'random click'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on'), ('interactive', 'interactive mode'), ('block_cookies', 'block cookie popups')]
 
 SWITCHES_MAPPED = {
     '!Susie': '!Susie (http://www.sync2it.com/susie)',
@@ -1287,7 +1287,7 @@ class UserView(ModelView):
         '''
         User list route
         '''
-        self._template_args['card_title'] = 'Current users'
+        self._template_args['card_title'] = 'Users'
         return super(UserView, self).index_view()
 
 
@@ -1336,7 +1336,7 @@ class ReportsViewJSON(ModelView):
         '''
         json reports list route
         '''
-        self._template_args['card_title'] = 'Generated JSON reports'
+        self._template_args['card_title'] = 'JSON Reports'
         return super(ReportsViewJSON, self).index_view()
 
 
@@ -1374,7 +1374,7 @@ class ReportsViewHTML(ModelView):
         '''
         html reports list route
         '''
-        self._template_args['card_title'] = 'Generated HTML reports'
+        self._template_args['card_title'] = 'All Reports'
         return super(ReportsViewHTML, self).index_view()
 
 
@@ -1417,7 +1417,7 @@ class LogsView(ModelView):
         '''
         logs list route
         '''
-        self._template_args['card_title'] = 'Generated logs'
+        self._template_args['card_title'] = 'Task Logs'
         return super(LogsView, self).index_view()
 
 
@@ -1463,7 +1463,7 @@ class InputView(ModelView):
         '''
         logs list route
         '''
-        self._template_args['card_title'] = 'Generated logs'
+        self._template_args['card_title'] = 'Submissions'
         return super(InputView, self).index_view()
 
 
@@ -1509,6 +1509,12 @@ class CustomAdminIndexView(AdminIndexView):
     '''
     Custom login view
     '''
+    def is_visible(self):
+        '''
+        hidden from the sidebar menu, index redirects to the task queue
+        '''
+        return False
+
     @expose('/')
     def index(self):
         '''
@@ -1516,12 +1522,8 @@ class CustomAdminIndexView(AdminIndexView):
         '''
         if not current_user.is_authenticated:
             return redirect(url_for('.login_view'))
-        # return redirect("/stats")
-
-        self._template_args['filename'] = "https://github.com/qeeqbox/url-sandbox"
-        self._template_args['intro'] = "Do not forget to check my other project!"
-        #self._template_args['location_tree'] = "Home"
-        return super(CustomAdminIndexView, self).index()
+        # land on the live task queue, mirroring the UrlProbe dashboard flow
+        return redirect('/queue/')
 
     @expose('/login/', methods=['POST', 'GET'])
     def login_view(self):
@@ -1609,15 +1611,16 @@ class BufferForm(form.Form):
     '''
     needs more check
     '''
-    choices = MultiCheckboxField('Assigned', choices=SWITCHES)
+    choices = MultiCheckboxField('Assigned', choices=SWITCHES, default=['block_cookies'])
     buffer = fields.TextAreaField(render_kw={"class": "buffer"})
     proxy = fields.StringField(render_kw={"class": "proxy", "placeholder": "socks5://proxy:9050"})
     useragents = fields.SelectField('useragents', choices=USERAGENTS, default="Firefox")
     urltimeout = fields.SelectField('urltimeout', choices=[(5, '5 sec URL timeout'), (10, '10 sec URL timeout'), (30, '30 sec URL timeout'), (60, '1 min URL timeout')], default=(URL_TIMEOUT), coerce=int)
     analyzertimeout = fields.SelectField('analyzertimeout', choices=[(30, '30 sec analyzing timeout'), (60, '1 min analyzing timeout'), (120, '2 mins analyzing timeout')], default=(ANALYZER_TIMEOUT), coerce=int)
-    submit = fields.SubmitField(render_kw={"class": "btn"})
-    submitandwait = fields.SubmitField('Submit And Wait', render_kw={"class": "btn"})
-    __order = ('buffer', 'proxy', 'choices', 'useragents', 'urltimeout', 'analyzertimeout', 'submit', 'submitandwait')
+    interactivetimeout = fields.SelectField('interactivetimeout', choices=[(300, '5 min interactive timeout'), (600, '10 min interactive timeout'), (900, '15 min interactive timeout')], default=300, coerce=int)
+    submit = fields.SubmitField('Analyze', render_kw={"class": "btn"})
+    submitandwait = fields.SubmitField('Analyze & Wait', render_kw={"class": "btn btn-secondary"})
+    __order = ('buffer', 'proxy', 'choices', 'useragents', 'urltimeout', 'analyzertimeout', 'interactivetimeout', 'submit', 'submitandwait')
 
     def __iter__(self):
         temp_fields = list(super(BufferForm, self).__iter__())
@@ -1630,6 +1633,12 @@ class CustomViewBufferForm(BaseView):
     upload buffer main form
     '''
     extra_js = ['/static/checktask.js']
+
+    def is_visible(self):
+        '''
+        hidden from the sidebar menu, reachable via the New Analysis buttons
+        '''
+        return False
 
     @expose('/', methods=['POST', 'GET'])
     def index(self):
@@ -1657,6 +1666,7 @@ class CustomViewBufferForm(BaseView):
                     result["task"] = task
                     result["analyzer_timeout"] = temp_form.analyzertimeout.data
                     result["url_timeout"] = temp_form.urltimeout.data
+                    result["interactive_timeout"] = temp_form.interactivetimeout.data
                     result["useragent"] = temp_form.useragents.data
                     result["useragent_mapped"] = SWITCHES_MAPPED[temp_form.useragents.data]
                     if result['use_proxy']:
@@ -1665,15 +1675,19 @@ class CustomViewBufferForm(BaseView):
                     _task = CELERY.send_task(json_settings[environ["project_env"]]["worker"]["name"],
                                              args=[result],
                                              queue=json_settings[environ["project_env"]]["worker"]["queue"])
-                    if request.form.get('submitandwait') == 'Submit And Wait':
+                    if request.form.get('submitandwait') == 'Analyze & Wait':
+                        # stay on the page so the spinner can poll and show the
+                        # finished report inline
                         flash(gettext(task), 'successandwaituuid')
                     else:
-                        flash(gettext('Done submitting buffer Task {}'.format(task)), 'success')
+                        # plain submit — jump straight to the live task queue
+                        flash(gettext('Analysis queued'), 'success')
+                        return redirect('/queue/')
                 else:
                     flash(gettext("Invalid URL"), 'error')
             else:
                 flash(gettext("Something wrong"), 'error')
-        return self.render("upload.html", header="Scan URL", form=temp_form, switches_details="")
+        return self.render("upload.html", header="New Analysis", form=temp_form, switches_details="")
 
     def is_accessible(self):
         '''
@@ -1718,6 +1732,191 @@ def get_stats():
                       "Free disk size": "{}".format(convert_size(free)),
                       "Host platform": pplatform()})
     return stats
+
+
+def _relative_time(dt):
+    '''
+    humanize a UTC datetime as a short "x ago" string
+    '''
+    if not dt:
+        return "—"
+    delta = datetime.utcnow() - dt
+    secs = int(delta.total_seconds())
+    if secs < 0:
+        secs = 0
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return "{}m ago".format(secs // 60)
+    if secs < 86400:
+        return "{}h ago".format(secs // 3600)
+    return "{}d ago".format(secs // 86400)
+
+
+def _format_duration(start, end):
+    '''
+    format elapsed time between start and end (or now while running)
+    '''
+    if not start:
+        return "—"
+    ref = end or datetime.utcnow()
+    secs = int((ref - start).total_seconds())
+    if secs < 0:
+        secs = 0
+    if secs < 60:
+        return "{}s".format(secs)
+    return "{}m {:02d}s".format(secs // 60, secs % 60)
+
+
+def get_queue_tasks(limit=100):
+    '''
+    live task queue built from the task lifecycle collection (taskdblogs).
+    end is None while a task is queued/running, set once it completes.
+    '''
+    tasks = []
+    with ignore_exception(Exception):
+        cursor = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find().sort([("start", -1)]).limit(limit)
+        for item in cursor:
+            start = item.get("start")
+            end = item.get("end")
+            logs = item.get("logs") or []
+            if end:
+                status = "completed"
+            elif logs:
+                status = "running"
+            else:
+                status = "queued"
+            tasks.append({
+                "task": item.get("task", ""),
+                "target": item.get("buffer", "") or item.get("domain", "") or "—",
+                "type": "File" if item.get("type") == "file" else "URL",
+                "status": status,
+                "submitted": _relative_time(start),
+                "duration": _format_duration(start, end),
+            })
+    return tasks
+
+
+def get_queue_kpis(tasks):
+    '''
+    summary counters for the queue KPI row
+    '''
+    return {
+        "total": len(tasks),
+        "running": sum(1 for t in tasks if t["status"] == "running"),
+        "queued": sum(1 for t in tasks if t["status"] == "queued"),
+        "completed": sum(1 for t in tasks if t["status"] == "completed"),
+    }
+
+
+class CustomQueueView(BaseView):
+    '''
+    live task queue view (auto-refreshing)
+    '''
+    extra_js = ['/static/queue.js']
+
+    @expose('/', methods=['GET', 'POST'])
+    def index(self):
+        '''
+        GET renders the queue shell, POST returns the current queue as JSON
+        '''
+        if request.method == 'POST':
+            tasks = get_queue_tasks()
+            return jsonify({"tasks": tasks, "kpis": get_queue_kpis(tasks)})
+        tasks = get_queue_tasks()
+        return self.render("queue.html", tasks=tasks, kpis=get_queue_kpis(tasks))
+
+    def is_accessible(self):
+        '''
+        is accessible
+        '''
+        return current_user.is_authenticated
+
+    def inaccessible_callback(self, name, **kwargs):
+        '''
+        if not accessible then go to login
+        '''
+        return redirect(url_for('admin.login_view', next=request.url))
+
+
+class CustomReportView(BaseView):
+    '''
+    per-task report viewer (HTML and JSON), reached from the task queue
+    '''
+    def is_visible(self):
+        '''
+        hidden from the sidebar, opened from a queue row
+        '''
+        return False
+
+    def is_accessible(self):
+        return current_user.is_authenticated
+
+    def inaccessible_callback(self, name, **kwargs):
+        return redirect(url_for('admin.login_view', next=request.url))
+
+    @expose('/')
+    def index(self):
+        return redirect('/queue/')
+
+    @expose('/<task_id>')
+    def view(self, task_id):
+        '''
+        render the stored HTML report body inside the themed layout
+        '''
+        body = ""
+        with ignore_exception(Exception):
+            item = get_it_fs(defaultdb["dbname"], {"task": task_id, 'contentType': 'text/html'})
+            if item:
+                found = BeautifulSoup(item, 'html.parser').find('body')
+                body = found.decode_contents() if found else item.decode('utf-8', 'ignore')
+        return self.render("report.html", task_id=task_id, report_body=body)
+
+    @expose('/<task_id>/json')
+    def view_json(self, task_id):
+        '''
+        return the stored JSON report as a downloadable/inline document
+        '''
+        item = None
+        with ignore_exception(Exception):
+            item = get_it_fs(defaultdb["dbname"], {"task": task_id, 'contentType': 'application/json'})
+        if not item:
+            return jsonify(error="No JSON report for this task"), 404
+        if isinstance(item, bytes):
+            item = item.decode('utf-8', 'ignore')
+        return APP.response_class(item, mimetype='application/json')
+
+
+class CustomTaskLogView(BaseView):
+    '''
+    per-task log viewer, reached from the task queue
+    '''
+    def is_visible(self):
+        return False
+
+    def is_accessible(self):
+        return current_user.is_authenticated
+
+    def inaccessible_callback(self, name, **kwargs):
+        return redirect(url_for('admin.login_view', next=request.url))
+
+    @expose('/')
+    def index(self):
+        return redirect('/queue/')
+
+    @expose('/<task_id>')
+    def view(self, task_id):
+        '''
+        show the log lines captured for a single task
+        '''
+        target = task_id
+        logs = []
+        with ignore_exception(Exception):
+            item = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one({"task": task_id})
+            if item:
+                target = item.get("buffer") or item.get("domain") or task_id
+                logs = item.get("logs") or []
+        return self.render("tasklog.html", task_id=task_id, target=target, logs=logs)
 
 
 class CustomStatsView(BaseView):
@@ -1845,6 +2044,80 @@ class CheckTask(BaseView):
         return redirect(url_for('admin.login_view', next=request.url))
 
 
+def update_gridfs_report(task_id, new_screenshot_base64, new_full_screenshot_base64=None):
+    try:
+        report_doc = CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].find_one({"task": task_id, "type": "text/html"})
+        if report_doc:
+            old_file_id = report_doc["file"]
+            html_content = get_it_fs(defaultdb["dbname"], {"_id": old_file_id})
+            if html_content:
+                soup = BeautifulSoup(html_content, 'html.parser')
+                
+                # Update normal viewport screenshot
+                tbody = soup.find('tbody', class_='table-Screenshot')
+                if tbody:
+                    img = tbody.find('img', class_='fullsize')
+                    if img:
+                        img['src'] = "data:image/jpeg;base64, " + new_screenshot_base64
+                        
+                # Update full page screenshot if it is provided
+                if new_full_screenshot_base64:
+                    full_tbody = soup.find('tbody', class_='table-Full_Screenshot')
+                    if full_tbody:
+                        full_img = full_tbody.find('img', class_='fullsize')
+                        if full_img:
+                            full_img['src'] = "data:image/jpeg;base64, " + new_full_screenshot_base64
+                        
+                from gridfs import GridFS
+                fs = GridFS(CLIENT[defaultdb["dbname"]])
+                fs.delete(old_file_id)
+                new_file_id = fs.put(str(soup).encode('utf-8'), filename=task_id, task=task_id, content_type="text/html")
+                CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].update_one({"_id": report_doc["_id"]}, {"$set": {"file": new_file_id}})
+    except Exception as e:
+        print(f"Error updating GridFS report: {e}", flush=True)
+
+
+@APP.route('/live_interact/<task_id>', methods=['POST'])
+@CSRF.exempt
+def live_interact(task_id):
+    if not current_user.is_authenticated:
+        return jsonify(error="Unauthorized"), 401
+        
+    json_content = request.get_json(silent=True) or {}
+    
+    socket_path = path.join(json_settings[environ["project_env"]]["output_folder"], task_id, "control.sock")
+    if not path.exists(socket_path):
+        return jsonify(error="Session not active or socket not found"), 404
+        
+    import socket
+    import json
+    try:
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.connect(socket_path)
+        client.sendall(json.dumps(json_content).encode('utf-8'))
+        
+        response_data = b""
+        while True:
+            chunk = client.recv(4096)
+            if not chunk:
+                break
+            response_data += chunk
+        client.close()
+        
+        res = json.loads(response_data.decode('utf-8'))
+        if res.get('status') == 'ok':
+            new_screenshot = res.get('screenshot')
+            new_full_screenshot = res.get('full_screenshot')
+            if new_screenshot:
+                update_gridfs_report(task_id, new_screenshot, new_full_screenshot)
+            return jsonify(res)
+        else:
+            return jsonify(error=res.get('message', 'Error from sandbox')), 500
+    except Exception as e:
+        return jsonify(error=f"Connection error: {str(e)}"), 500
+
+
+
 
 
 
@@ -1911,19 +2184,14 @@ class StarProject(MenuLink):
         return redirect(url_for('admin.login_view', next=request.url))
 
 
-ADMIN = Admin(APP, "QeeqBox", index_view=CustomAdminIndexView(url='/'), base_template='base.html', template_mode='bootstrap3')
-ADMIN.add_link(CustomMenuLink(name='', category='', url="https://github.com/qeeqbox/url-sandbox", icon_type='glyph', icon_value='glyphicon-star'))
-ADMIN.add_link(CustomMenuLink(name='', category='', url="https://github.com/qeeqbox/url-sandbox/archive/master.zip", icon_type='glyph', icon_value='glyphicon-download-alt'))
-ADMIN.add_link(CustomMenuLink(name='', category='', url="https://github.com/qeeqbox/url-sandbox/subscription", icon_type='glyph', icon_value='glyphicon glyphicon-eye-open'))
-ADMIN.add_link(CustomMenuLink(name='Logout', category='', url="/logout", icon_type='glyph', icon_value='glyphicon glyphicon-user'))
-ADMIN.add_view(CustomViewBufferForm(name="URL", endpoint='url', menu_icon_type='glyph', menu_icon_value='glyphicon-edit', category='Analyze'))
-ADMIN.add_view(ReportsViewHTML(Reports, name="HTML", endpoint='reportshtml', menu_icon_type='glyph', menu_icon_value='glyphicon-list-alt', category='Reports'))
-ADMIN.add_view(ReportsViewJSON(Reports, name="JSON", endpoint='reportsjson', menu_icon_type='glyph', menu_icon_value='glyphicon-list-alt', category='Reports'))
-ADMIN.add_view(LogsView(Logs, name='Tasks', menu_icon_type='glyph', menu_icon_value='glyphicon-info-sign', category='Logs'))
-ADMIN.add_view(InputView(Input, name='Input', menu_icon_type='glyph', menu_icon_value='glyphicon-info-sign', category='Logs'))
-ADMIN.add_view(CustomLogsView(name="Active", endpoint='activelogs', menu_icon_type='glyph', menu_icon_value='glyphicon-flash', category='Logs'))
-ADMIN.add_view(CustomStatsView(name="Stats", endpoint='stats', menu_icon_type='glyph', menu_icon_value='glyphicon-stats'))
-ADMIN.add_view(UserView(User, menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
+ADMIN = Admin(APP, "UrlProbe", index_view=CustomAdminIndexView(url='/'), base_template='base.html', template_mode='bootstrap3')
+ADMIN.add_link(CustomMenuLink(name='Logout', category='', url="/logout", icon_type='glyph', icon_value='glyphicon glyphicon-log-out'))
+ADMIN.add_view(CustomViewBufferForm(name="New Analysis", endpoint='url', menu_icon_type='glyph', menu_icon_value='glyphicon-plus'))
+ADMIN.add_view(CustomQueueView(name="Task Queue", endpoint='queue', menu_icon_type='glyph', menu_icon_value='glyphicon-tasks', category='Monitor'))
+ADMIN.add_view(CustomLogsView(name="Active Logs", endpoint='activelogs', menu_icon_type='glyph', menu_icon_value='glyphicon-flash', category='Monitor'))
+# Report / logs are reached from a task row in the queue, not from the sidebar.
+ADMIN.add_view(CustomReportView(name='Report', endpoint='report'))
+ADMIN.add_view(CustomTaskLogView(name='Task Log', endpoint='tasklog'))
 ADMIN.add_view(CheckTask('Task', endpoint='task', menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
 
 #app.run(host = "127.0.0.1", ssl_context=(certsdir+'cert.pem', certsdir+'key.pem'))

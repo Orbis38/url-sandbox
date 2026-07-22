@@ -4,6 +4,7 @@
 '''
 
 from sys import argv
+from time import sleep
 from json import loads, dump, dumps
 from warnings import filterwarnings
 from pyvirtualdisplay import Display
@@ -301,6 +302,70 @@ def parse_ouput(logs, table):
         print("[SandBox] parse_ouput failed")
 
 
+COOKIE_DISMISS_JS = r"""
+try {
+  // Common accept/reject wording across CMPs and languages.
+  var WORDS = ['accept all','accept','agree','i agree','allow all','allow',
+               'got it','ok','understand','continue','reject all','reject',
+               'decline','deny','refuse','only necessary','necessary only',
+               'accetta','accetto','rifiuta','consenti','ho capito',
+               'akzeptieren','ablehnen','zustimmen','accepter','refuser',
+               'aceptar','rechazar'];
+  function txt(el){ return (el.innerText || el.textContent || '').trim().toLowerCase(); }
+  var clicked = false;
+  var candidates = document.querySelectorAll(
+    'button, a, [role=button], input[type=button], input[type=submit]');
+  for (var i = 0; i < candidates.length && !clicked; i++) {
+    var el = candidates[i];
+    if (el.offsetParent === null) continue;         // not visible
+    var t = txt(el);
+    if (!t || t.length > 40) continue;
+    for (var j = 0; j < WORDS.length; j++) {
+      if (t === WORDS[j] || t.indexOf(WORDS[j]) === 0) { try { el.click(); clicked = true; } catch(e){} break; }
+    }
+  }
+  // Hide known consent containers and any leftover fixed/sticky overlays.
+  var SEL = ['#onetrust-consent-sdk','#onetrust-banner-sdk','.ot-sdk-container',
+             '#CybotCookiebotDialog','#cookiebanner','.cookie-banner','.cookie-consent',
+             '[id*="cookie"]','[class*="cookie"]','[id*="consent"]','[class*="consent"]',
+             '.qc-cmp2-container','#usercentrics-root','[aria-label*="cookie" i]',
+             '[aria-label*="consent" i]'];
+  SEL.forEach(function(s){
+    document.querySelectorAll(s).forEach(function(el){
+      var r = el.getBoundingClientRect();
+      var pos = getComputedStyle(el).position;
+      if ((pos === 'fixed' || pos === 'sticky' || pos === 'absolute') && r.height > 0) {
+        el.style.setProperty('display','none','important');
+      }
+    });
+  });
+  // Restore scrolling that banners often lock.
+  document.documentElement.style.setProperty('overflow','auto','important');
+  document.body.style.setProperty('overflow','auto','important');
+} catch (e) {}
+"""
+
+
+def dismiss_cookie_banners(driver, settle=0.6):
+    '''
+    click common cookie-consent accept/reject buttons and hide leftover
+    banners so they do not appear in the captured screenshot.
+
+    The hide step is synchronous, so a single pass already clears banners.
+    The optional second pass (after `settle`) only catches banners that
+    animate in after the accept click. Interactive mode passes settle=0 so
+    this never delays the control-socket startup the worker is waiting on.
+    '''
+    try:
+        driver.execute_script(COOKIE_DISMISS_JS)
+        if settle:
+            sleep(settle)
+            driver.execute_script(COOKIE_DISMISS_JS)
+        print("[SandBox] Cookie banners dismissed")
+    except BaseException:
+        print("[SandBox] dismiss_cookie_banners failed")
+
+
 def chrome_driver(parsed, analyzer_db):
     '''
     init webdriver and submit parsed options
@@ -314,15 +379,48 @@ def chrome_driver(parsed, analyzer_db):
     get_dns(parsed, extracted_table)
     get_headers(parsed, extracted_table)
     chrome_options = ChromeOptions()
+    # Return control at DOMContentLoaded rather than waiting for every image,
+    # font and tracker to finish — big speedup on heavy pages, screenshot still
+    # captures the rendered document.
+    chrome_options.page_load_strategy = 'eager'
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--user-agent={}'.format(parsed['useragent_mapped']))
     if parsed['use_proxy']:
         chrome_options.add_argument('--proxy-server=%s' % parsed['proxy'])
+    # Always deny permission prompts (notifications, geolocation, camera/mic) so
+    # they never steal focus or appear in the captured screenshot. 2 == block.
+    chrome_options.add_argument('--deny-permission-prompts')
+    chrome_options.add_experimental_option('prefs', {
+        'profile.default_content_setting_values.notifications': 2,
+        'profile.default_content_setting_values.geolocation': 2,
+        'profile.default_content_setting_values.media_stream_mic': 2,
+        'profile.default_content_setting_values.media_stream_camera': 2,
+    })
     chrome_options.binary_location = "/usr/bin/google-chrome"
     chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     service = Service(executable_path="/usr/bin/chromedriver")
     chromebrowser = webdriver.Chrome(options=chrome_options, service=service)
+    chromebrowser.set_window_size(800, 600)
+    # Bind the interactive control socket BEFORE the (potentially long) page
+    # analysis so the file exists immediately. The backend only waits for the
+    # socket to appear within analyzer_timeout; binding late (after page load +
+    # screenshots) risked that wait expiring, which killed the container and
+    # left a stale socket the frontend could not connect to (Errno 111).
+    # A bound+listening socket queues any early connect in its backlog until
+    # the accept loop starts at the end of this function.
+    interactive_server = None
+    if parsed.get('interactive'):
+        interactive_server = create_interactive_socket(parsed)
+    # Bound how long a navigation may block. Without this, get() uses Chrome's
+    # 300s default and a slow target (especially over Tor) stalls the whole
+    # analysis past the worker/celery time limits. On timeout get() raises and
+    # we simply screenshot whatever loaded. page_load_strategy='eager' returns
+    # at DOMContentLoaded instead of waiting for every sub-resource/tracker.
+    try:
+        chromebrowser.set_page_load_timeout(int(parsed["url_timeout"]))
+    except BaseException:
+        pass
     if parsed["no_redirect"]:
         chromebrowser.implicitly_wait(0.1)
         try:
@@ -336,6 +434,8 @@ def chrome_driver(parsed, analyzer_db):
             chromebrowser.get(parsed["buffer"])
         except BaseException:
             pass
+    if parsed.get('block_cookies'):
+        dismiss_cookie_banners(chromebrowser, settle=0 if parsed.get('interactive') else 0.6)
     performance_logs = chromebrowser.get_log('performance')
     get_cert(parsed, extracted_table)
     get_all_links(chromebrowser.page_source, extracted_table)
@@ -345,6 +445,205 @@ def chrome_driver(parsed, analyzer_db):
     take_normal_screen_shot(chromebrowser, screenshot_table, words_table)
     parse_ouput(performance_logs, analyzer_table)
     make_network(analyzer_table, network_table)
+    if parsed.get('interactive') and interactive_server is not None:
+        # Signal the backend that the initial analysis (screenshots, cert,
+        # network graph, …) is fully written to the shared output, so it can
+        # build a COMPLETE report before we hand off to the interactive loop.
+        # The control socket is bound early (for connection reliability), so it
+        # cannot double as the "analysis done" signal any more.
+        signal_analysis_done(parsed)
+        serve_interactive(interactive_server, chromebrowser, parsed, analyzer_db)
     chromebrowser.quit()
     DISPLAY.stop()
     print("[SandBox] main logic done")
+
+
+def signal_analysis_done(parsed):
+    '''
+    write a marker file once the initial analysis output is saved, so the
+    backend knows it is safe to build the report even though the interactive
+    container stays alive afterwards
+    '''
+    import os
+    try:
+        marker = os.path.join(parsed['locations']['box_output'], parsed['task'], "analysis.done")
+        with open(marker, 'w') as fh:
+            fh.write("done")
+        print("[SandBox] Analysis-complete marker written", flush=True)
+    except Exception as e:
+        print(f"[SandBox] signal_analysis_done failed: {e}", flush=True)
+
+
+def create_interactive_socket(parsed):
+    '''
+    create, bind and listen the interactive control socket early so the file
+    exists before the page analysis runs. Returns the listening server socket,
+    or None on failure. Connections that arrive before serve_interactive() runs
+    queue in the listen backlog and are handled once accept() is called.
+    '''
+    import socket
+    import os
+
+    try:
+        task_id = parsed['task']
+        socket_dir = os.path.join(parsed['locations']['box_output'], task_id)
+        if not os.path.exists(socket_dir):
+            os.makedirs(socket_dir, exist_ok=True)
+        socket_path = os.path.join(socket_dir, "control.sock")
+
+        if os.path.exists(socket_path):
+            try:
+                os.remove(socket_path)
+            except Exception:
+                pass
+
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(socket_path)
+        server.listen(8)
+        print(f"[SandBox] Interactive Unix socket bound at {socket_path}", flush=True)
+        return server
+    except Exception as e:
+        print(f"[SandBox] create_interactive_socket failed: {e}", flush=True)
+        return None
+
+
+def serve_interactive(server, driver, parsed, analyzer_db):
+    import socket
+    import os
+    import json
+    import time
+    from base64 import b64encode
+
+    socket_path = os.path.join(parsed['locations']['box_output'], parsed['task'], "control.sock")
+    # idle timeout for the interactive session, chosen by the user (default 5 min)
+    idle_timeout = float(parsed.get('interactive_timeout', 300) or 300)
+    server.settimeout(idle_timeout)
+
+    print(f"[SandBox] Interactive Unix socket server accepting connections (idle timeout {int(idle_timeout)}s)", flush=True)
+    screenshot_table = analyzer_db.table('screenshot_table')
+    last_interaction_time = time.time()
+
+    while True:
+        try:
+            if time.time() - last_interaction_time > idle_timeout:
+                print("[SandBox] Interactive session timed out.", flush=True)
+                break
+
+            server.settimeout(max(1.0, idle_timeout - (time.time() - last_interaction_time)))
+            try:
+                conn, addr = server.accept()
+            except socket.timeout:
+                continue
+                
+            conn.settimeout(10.0)
+            data = conn.recv(4096)
+            if not data:
+                conn.close()
+                continue
+                
+            try:
+                req = json.loads(data.decode('utf-8'))
+                action = req.get('action')
+                print(f"[SandBox] Received action: {action}", flush=True)
+                
+                if action == 'click':
+                    x = int(req.get('x', 0))
+                    y = int(req.get('y', 0))
+                    is_full = req.get('is_full', False)
+                    
+                    if is_full:
+                        scroll_y = max(0, y - 300)
+                        driver.execute_script("window.scrollTo(0, arguments[0]);", scroll_y)
+                        time.sleep(0.2)
+                        actual_y = y - driver.execute_script("return window.pageYOffset;")
+                        actual_x = x
+                    else:
+                        actual_x = x
+                        actual_y = y
+                        
+                    viewport = driver.execute_script(
+                        "return [window.innerWidth, window.innerHeight];")
+                    actual_x = max(0, min(actual_x, viewport[0] - 1))
+                    actual_y = max(0, min(actual_y, viewport[1] - 1))
+
+                    print(f"[SandBox] Dispatching mouse click at ({actual_x}, {actual_y})", flush=True)
+                    try:
+                        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                            "type": "mouseMoved",
+                            "x": actual_x, "y": actual_y})
+                        time.sleep(0.1)
+                        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                            "type": "mousePressed",
+                            "x": actual_x, "y": actual_y,
+                            "button": "left", "clickCount": 1})
+                        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+                            "type": "mouseReleased",
+                            "x": actual_x, "y": actual_y,
+                            "button": "left", "clickCount": 1})
+                    except Exception as e:
+                        print(f"[SandBox] CDP click failed: {e}", flush=True)
+                    time.sleep(1.0)
+                    
+                elif action == 'scroll':
+                    amount = int(req.get('amount', 0))
+                    driver.execute_script("window.scrollBy(0, arguments[0]);", amount)
+                    time.sleep(0.2)
+                    
+                elif action == 'close':
+                    print("[SandBox] Close requested. Shutting down interactive server.", flush=True)
+                    conn.sendall(json.dumps({"status": "ok", "message": "closed"}).encode('utf-8'))
+                    conn.close()
+                    break
+                    
+                screenshot = driver.get_screenshot_as_png()
+                screenshot_table.truncate()
+                
+                take_full = parsed.get('take_full_screenshot', False)
+                full_img_base64 = None
+                
+                if take_full:
+                    try:
+                        element = driver.find_element(By.TAG_NAME, 'html')
+                        full_screenshot = element.get_screenshot_as_png()
+                        screenshot_table.insert({
+                            'normal_image': hexlify(screenshot).decode('utf-8'),
+                            'full_image': hexlify(full_screenshot).decode('utf-8')
+                        })
+                        full_img_base64 = b64encode(full_screenshot).decode('utf-8')
+                    except Exception as fe:
+                        print(f"[SandBox] Interactive full screenshot failed: {fe}", flush=True)
+                        screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                else:
+                    screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                
+                img_base64 = b64encode(screenshot).decode('utf-8')
+                response = {
+                    "status": "ok",
+                    "screenshot": img_base64
+                }
+                if full_img_base64:
+                    response["full_screenshot"] = full_img_base64
+                    
+                conn.sendall(json.dumps(response).encode('utf-8'))
+                last_interaction_time = time.time()
+                
+            except Exception as ex:
+                print(f"[SandBox] Error processing request: {ex}", flush=True)
+                try:
+                    conn.sendall(json.dumps({"status": "error", "message": str(ex)}).encode('utf-8'))
+                except:
+                    pass
+            finally:
+                conn.close()
+                
+        except Exception as e:
+            print(f"[SandBox] Socket server exception: {e}", flush=True)
+            break
+            
+    server.close()
+    if os.path.exists(socket_path):
+        try:
+            os.remove(socket_path)
+        except Exception:
+            pass
+    print("[SandBox] Interactive socket server stopped.", flush=True)
