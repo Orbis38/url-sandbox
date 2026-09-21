@@ -56,6 +56,7 @@ services:
       - frontend_box
     volumes:
       - /etc/localtime:/etc/localtime:ro
+      - tor_data:/var/lib/tor
 
   box:
     build:
@@ -107,3 +108,6 @@ networks:
   frontend_box:
     internal: false
     name: url-sandbox_frontend_box
+
+volumes:
+  tor_data:

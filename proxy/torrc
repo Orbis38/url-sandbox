@@ -1,4 +1,7 @@
 SocksPort 0.0.0.0:9050
 TransPort 0.0.0.0:9040
 DNSPort 0.0.0.0:53
-AvoidDiskWrites 1
+ControlPort 0.0.0.0:9051
+HashedControlPassword 16:3132333435363738606270179509BA4364E8C9AC72C315F0317EA7F98A
+User tor
+DataDirectory /var/lib/tor

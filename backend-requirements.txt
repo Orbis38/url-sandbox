@@ -10,3 +10,4 @@ jinja2
 tinydb
 beautifulsoup4
 tldextract
+Pillow

@@ -3,17 +3,12 @@
     backend -> worker
 '''
 
-from os import environ, getpid, path
+from os import environ, path
 from time import sleep
-from datetime import datetime
-from shutil import rmtree
-from types import FunctionType
 from docker import from_env
 from binascii import hexlify
 from json import dumps as jdumps
-from jinja2 import Template
 from celery import Celery
-from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from tldextract import extract as textract
 from qbreport import make_report
 from shared.settings import json_settings
@@ -32,10 +27,16 @@ CELERY.conf.update(
 )
 
 
-def clean_up():
-    for container in DOCKER_CLIENT.containers.list():
-        if "url-sandbox-box" in container.name:
-            container.stop()
+def find_free_port(start=6080, end=6100):
+    import socket
+    for port in range(start, end):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('0.0.0.0', port))
+                return port
+            except OSError:
+                continue
+    return start
 
 
 @CELERY.task(bind=True, name=json_settings[environ["project_env"]]["worker"]["name"], queue=json_settings[environ["project_env"]]["worker"]["queue"], soft_time_limit=json_settings[environ["project_env"]]["worker"]["task_time_limit"], time_limit=json_settings[environ["project_env"]]["worker"]["task_time_limit"] + 10, max_retries=0, default_retry_delay=5)
@@ -52,12 +53,17 @@ def analyze_url(self, parsed):
             pass
         log_string(parsed["domain"], task=parsed['task'])
         parsed['locations'] = json_settings[environ["project_env"]]["task_logs"]
-        if parsed['use_proxy']:
-            log_string("Proxy detected", task=parsed['task'])
-            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box")
+        ports = None
+        if parsed.get('interactive'):
+            vnc_port = find_free_port(6080, 6100)
+            parsed['vnc_port'] = vnc_port
+            ports = {'6080/tcp': vnc_port}
+            log_string("Interactive mode: assigned host VNC port {}".format(vnc_port), task=parsed['task'])
+        if parsed.get('use_proxy'):
+            log_string("Routing via Tor proxy gateway", task=parsed['task'])
         else:
-            log_string("No proxy, running privileged for custom tor config", task=parsed['task'])
-            temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", privileged=True)
+            log_string("Direct network connection (no proxy)", task=parsed['task'])
+        temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", ports=ports)
         temp_logs = ""
         if parsed.get('interactive'):
             log_string("Interactive mode requested. Waiting for analysis to complete...", task=parsed['task'])
@@ -119,7 +125,6 @@ def analyze_url(self, parsed):
             except Exception:
                 pass
             temp_container = None
-    # clean_up()
     try:
         if temp_container is not None and not parsed.get('interactive'):
             temp_container.stop()

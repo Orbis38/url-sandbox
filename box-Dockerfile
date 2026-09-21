@@ -3,11 +3,12 @@ ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update && apt-get install -y build-essential curl unzip wget jq xvfb firefox-esr tor iptables-persistent iptables net-tools supervisor tcpdump libtesseract-dev libleptonica-dev tesseract-ocr
+RUN apt-get update && apt-get install -y build-essential curl unzip wget jq xvfb firefox-esr tor iptables-persistent iptables net-tools supervisor tcpdump libtesseract-dev libleptonica-dev tesseract-ocr x11vnc novnc websockify openbox
 COPY box-requirements.txt .
 RUN pip install -r box-requirements.txt
 RUN apt-get update && apt-get install -y chromium chromium-driver && \
-    ln -s /usr/bin/chromium /usr/bin/google-chrome
+    ln -s /usr/bin/chromium /usr/bin/google-chrome && \
+    ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 COPY ./box/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN mkdir /output
 ADD ./box ./box

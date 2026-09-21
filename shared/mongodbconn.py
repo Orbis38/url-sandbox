@@ -26,16 +26,6 @@ def update_task_by_uuid(database_name, collection_name, task, _set):
     CLIENT[database_name][collection_name].update_one({'task': task}, {'$set': _set})
 
 
-def update_item(database_name, collection_name, _id, _set):
-    '''
-    simple item update
-    '''
-    item = CLIENT[database_name][collection_name].find_one_and_update({'_id': _id}, {'$set': _set})
-    if item is not None:
-        return item
-    return False
-
-
 def add_item(database_name, collection_name, _set):
     '''
     add an item and return it otherwise False
@@ -53,23 +43,6 @@ def find_item(database_name, collection_name, _set):
     item = CLIENT[database_name][collection_name].find_one(_set, {'_id': False})
     if item is not None:
         return item
-    return ""
-
-
-def find_items(database_name, _set):
-    '''
-    find multi items and return them otherwise return empty string
-    '''
-    _list = []
-    for collection_name in CLIENT[database_name].list_collection_names():
-        items = CLIENT[database_name][collection_name].find(_set, {'_id': False})
-        if items is not None:
-            for item in items:
-                item.update({"Collection": collection_name})
-                _list.append(item)
-
-    if len(_list) > 0:
-        return _list
     return ""
 
 

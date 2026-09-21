@@ -3,18 +3,10 @@
     web interface
 '''
 
-from os import environ, getpid, path
+from os import environ, path
 from uuid import uuid4
-from re import search, DOTALL
-from re import compile as rcompile
-from random import choice
 from datetime import timedelta, datetime
-from json import JSONEncoder, dumps
-from string import ascii_uppercase
-from platform import platform as pplatform
-from shutil import disk_usage
-from requests import get
-from psutil import cpu_percent, virtual_memory, Process
+from json import dumps
 from bson.objectid import ObjectId
 from flask import Flask, flash, jsonify, redirect, request, session, url_for
 from flask_mongoengine import MongoEngine
@@ -23,23 +15,21 @@ from wtforms import form, fields, validators, SelectMultipleField
 from flask_admin import AdminIndexView, Admin, expose, BaseView
 from flask_admin.menu import MenuLink
 from flask_admin.babel import gettext
-from flask_admin.contrib.mongoengine import ModelView
 from flask_login import LoginManager, current_user, login_user, logout_user
 from flask_bcrypt import Bcrypt
 from flaskext.markdown import Markdown
 from flask_wtf.csrf import CSRFProtect
-from werkzeug.utils import secure_filename
 from pymongo import ASCENDING
 from redis import Redis
 from celery import Celery
 from bs4 import BeautifulSoup
-from validator_collection import validators, checkers
+from validator_collection import validators
 from werkzeug.exceptions import HTTPException, default_exceptions
-from shared.settings import defaultdb, json_settings, meta_files_settings, meta_reports_settings, meta_task_files_logs_settings, meta_users_settings, meta_task_logs_settings
+from shared.settings import defaultdb, json_settings, meta_users_settings
 from shared.logger import ignore_exception
 from shared.mongodbconn import CLIENT, get_it_fs
 
-SWITCHES = [('full_analysis', 'full analysis'), ('use_proxy', 'use proxy'), ('no_redirect', 'no redirect'), ('random_click', 'random click'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on'), ('interactive', 'interactive mode'), ('block_cookies', 'block cookie popups')]
+SWITCHES = [('use_proxy', 'use Tor'), ('no_redirect', 'no redirect'), ('take_full_screenshot', 'full screenshot'), ('sniffer_on', 'turn sniffer on'), ('interactive', 'interactive mode'), ('block_cookies', 'block cookie popups')]
 
 SWITCHES_MAPPED = {
     '!Susie': '!Susie (http://www.sync2it.com/susie)',
@@ -86,8 +76,10 @@ SWITCHES_MAPPED = {
     'Charlotte': 'Mozilla/5.0 (compatible; Charlotte/1.1; http://www.searchme.com/support/)',
     'Charon': 'Mozilla/4.08 (Charon; Inferno)',
     'Cheshire': 'Mozilla/5.0 (Macintosh; U; PPC Mac OS X; en) AppleWebKit/418.8 (KHTML, like Gecko, Safari) Cheshire/1.0.UNOFFICIAL',
-    'Chimera': 'Mozilla/5.0 (Macintosh; U; PPC Mac OS X; pl-PL; rv:1.0.1) Gecko/20021111 Chimera/0.6',
-    'Chrome': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36',
+    'Chrome': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Chrome (Windows)': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Chrome (macOS)': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Edge': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
     'ChromePlus': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/532.2 (KHTML, like Gecko) ChromePlus/4.0.222.3 Chrome/4.0.222.3 Safari/532.2',
     'Classilla': 'Mozilla/5.0 (Macintosh; U; PPC; en-US; mimic; rv:9.3.0) Gecko/20120117 Firefox/3.6.25 Classilla/CFM',
     'Cocoal.icio.us': 'Cocoal.icio.us/1.0 (v43) (Mac OS X; http://www.scifihifi.com/cocoalicious)',
@@ -128,7 +120,7 @@ SWITCHES_MAPPED = {
     'Fennec': 'Mozilla/5.0 (Android; Linux armv7l; rv:9.0) Gecko/20111216 Firefox/9.0 Fennec/9.0',
     'FindLinks': 'findlinks/2.0.1 (+http://wortschatz.uni-leipzig.de/findlinks/)',
     'Firebird': 'Mozilla/5.0 (Windows; U; Windows NT 6.1; x64; fr; rv:1.9.2.13) Gecko/20101203 Firebird/3.6.13',
-    'Firefox': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:77.0) Gecko/20190101 Firefox/77.0',
+    'Firefox': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
     'Fireweb Navigator': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:2.0) Treco/20110515 Fireweb Navigator/2.4',
     'Flock': 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_6; en-US) AppleWebKit/534.7 (KHTML, like Gecko) Flock/3.5.3.4628 Chrome/7.0.517.450 Safari/534.7',
     'Fluid': 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_1; nl-nl) AppleWebKit/532.3+ (KHTML, like Gecko) Fluid/0.9.6 Safari/532.3+',
@@ -418,6 +410,14 @@ SWITCHES_MAPPED = {
     'zspider': 'zspider/0.9-dev http://feedback.redkolibri.com/'}
 
 USERAGENTS = [
+    ('Chrome',
+     'Chrome (Windows 10/11 - Modern Standard)'),
+    ('Chrome (macOS)',
+     'Chrome (macOS - Modern Standard)'),
+    ('Edge',
+     'Microsoft Edge (Windows 10/11)'),
+    ('Firefox',
+     'Mozilla Firefox (Modern Desktop)'),
     ('!Susie',
      '!Susie'),
     ('008',
@@ -1191,26 +1191,6 @@ Markdown(APP)
 APP.jinja_env.add_extension('jinja2.ext.loopcontrols')
 
 
-class Namespace:
-    '''
-    this namespace for switches
-    '''
-
-    def __init__(self, kwargs):
-        self.__dict__.update(kwargs)
-
-
-def convert_size(_size):
-    '''
-    convert size to unit
-    '''
-    for _unit in ['B', 'KB', 'MB', 'GB']:
-        if _size < 1024.0:
-            return "{:.2f}{}".format(_size, _unit)
-        _size /= 1024.0
-    return "File is too big"
-
-
 @LOGIN_MANAGER.user_loader
 def load_user(user_id):
     '''
@@ -1259,212 +1239,6 @@ class User(MONGO_DB.Document):
         unicode
         '''
         return self.login
-
-
-class UserView(ModelView):
-    '''
-    user view (visable)
-    '''
-    list_template = 'list.html'
-    can_create = False
-    can_delete = True
-    can_edit = False
-
-    def is_accessible(self):
-        '''
-        is accessible
-        '''
-        return current_user.is_authenticated
-
-    def inaccessible_callback(self, name, **kwargs):
-        '''
-        if not accessible then go to login
-        '''
-        return redirect(url_for('admin.login_view', next=request.url))
-
-    @expose('/')
-    def index_view(self):
-        '''
-        User list route
-        '''
-        self._template_args['card_title'] = 'Users'
-        return super(UserView, self).index_view()
-
-
-class Reports(MONGO_DB.Document):
-    '''
-    reports doc
-    '''
-    task = MONGO_DB.StringField()
-    type = MONGO_DB.StringField()
-    file = MONGO_DB.FileField()
-    time = MONGO_DB.DateTimeField()
-    meta = meta_reports_settings
-
-
-class ReportsViewJSON(ModelView):
-    '''
-    json reports view (visable)
-    '''
-    list_template = 'list.html'
-    can_create = False
-    can_delete = True
-    can_edit = False
-    column_searchable_list = ['task']
-    column_default_sort = ('time', True)
-
-    def is_accessible(self):
-        '''
-        is accessible
-        '''
-        return current_user.is_authenticated
-
-    def inaccessible_callback(self, name, **kwargs):
-        '''
-        if not accessible then go to login
-        '''
-        return redirect(url_for('admin.login_view', next=request.url))
-
-    def get_query(self):
-        '''
-        return json object
-        '''
-        return Reports.objects(type="application/json")
-
-    @expose('/')
-    def index_view(self):
-        '''
-        json reports list route
-        '''
-        self._template_args['card_title'] = 'JSON Reports'
-        return super(ReportsViewJSON, self).index_view()
-
-
-class ReportsViewHTML(ModelView):
-    '''
-    html reports view (visable)
-    '''
-    list_template = 'list.html'
-    can_create = False
-    can_delete = True
-    can_edit = False
-    column_searchable_list = ['task']
-    column_default_sort = ('time', True)
-
-    def is_accessible(self):
-        '''
-        is accessible
-        '''
-        return current_user.is_authenticated
-
-    def inaccessible_callback(self, name, **kwargs):
-        '''
-        if not accessible then go to login
-        '''
-        return redirect(url_for('admin.login_view', next=request.url))
-
-    def get_query(self):
-        '''
-        return html object
-        '''
-        return Reports.objects(type="text/html")
-
-    @expose('/')
-    def index_view(self):
-        '''
-        html reports list route
-        '''
-        self._template_args['card_title'] = 'All Reports'
-        return super(ReportsViewHTML, self).index_view()
-
-
-class Logs(MONGO_DB.Document):
-    '''
-    logs doc
-    '''
-    task = MONGO_DB.StringField()
-    type = MONGO_DB.StringField()
-    file = MONGO_DB.FileField()
-    time = MONGO_DB.DateTimeField()
-    meta = meta_task_files_logs_settings
-
-
-class LogsView(ModelView):
-    '''
-    logs view (visable)
-    '''
-    list_template = 'list.html'
-    can_create = False
-    can_delete = True
-    can_edit = False
-    column_searchable_list = ['task']
-    column_default_sort = ('time', True)
-
-    def is_accessible(self):
-        '''
-        is accessible
-        '''
-        return current_user.is_authenticated
-
-    def inaccessible_callback(self, name, **kwargs):
-        '''
-        if not accessible then go to login
-        '''
-        return redirect(url_for('admin.login_view', next=request.url))
-
-    @expose('/')
-    def index_view(self):
-        '''
-        logs list route
-        '''
-        self._template_args['card_title'] = 'Task Logs'
-        return super(LogsView, self).index_view()
-
-
-class Input(MONGO_DB.Document):
-    '''
-    logs doc
-    '''
-    start = MONGO_DB.DateTimeField()
-    task = MONGO_DB.StringField()
-    use_proxy = MONGO_DB.StringField()
-    proxy = MONGO_DB.StringField()
-    buffer = MONGO_DB.StringField()
-    useragent = MONGO_DB.StringField()
-    useragent_mapped = MONGO_DB.StringField()
-    meta = meta_task_logs_settings
-
-
-class InputView(ModelView):
-    '''
-    logs view (visable)
-    '''
-    list_template = 'list.html'
-    can_create = False
-    can_delete = True
-    can_edit = False
-    column_searchable_list = ['buffer']
-    column_default_sort = ('start', True)
-
-    def is_accessible(self):
-        '''
-        is accessible
-        '''
-        return current_user.is_authenticated
-
-    def inaccessible_callback(self, name, **kwargs):
-        '''
-        if not accessible then go to login
-        '''
-        return redirect(url_for('admin.login_view', next=request.url))
-
-    @expose('/')
-    def index_view(self):
-        '''
-        logs list route
-        '''
-        self._template_args['card_title'] = 'Submissions'
-        return super(InputView, self).index_view()
 
 
 class LoginForm(form.Form):
@@ -1611,16 +1385,15 @@ class BufferForm(form.Form):
     '''
     needs more check
     '''
-    choices = MultiCheckboxField('Assigned', choices=SWITCHES, default=['block_cookies'])
+    choices = MultiCheckboxField('Assigned', choices=SWITCHES, default=['use_proxy', 'block_cookies'])
     buffer = fields.TextAreaField(render_kw={"class": "buffer"})
-    proxy = fields.StringField(render_kw={"class": "proxy", "placeholder": "socks5://proxy:9050"})
-    useragents = fields.SelectField('useragents', choices=USERAGENTS, default="Firefox")
+    useragents = fields.SelectField('useragents', choices=USERAGENTS, default="Chrome")
     urltimeout = fields.SelectField('urltimeout', choices=[(5, '5 sec URL timeout'), (10, '10 sec URL timeout'), (30, '30 sec URL timeout'), (60, '1 min URL timeout')], default=(URL_TIMEOUT), coerce=int)
     analyzertimeout = fields.SelectField('analyzertimeout', choices=[(30, '30 sec analyzing timeout'), (60, '1 min analyzing timeout'), (120, '2 mins analyzing timeout')], default=(ANALYZER_TIMEOUT), coerce=int)
     interactivetimeout = fields.SelectField('interactivetimeout', choices=[(300, '5 min interactive timeout'), (600, '10 min interactive timeout'), (900, '15 min interactive timeout')], default=300, coerce=int)
     submit = fields.SubmitField('Analyze', render_kw={"class": "btn"})
     submitandwait = fields.SubmitField('Analyze & Wait', render_kw={"class": "btn btn-secondary"})
-    __order = ('buffer', 'proxy', 'choices', 'useragents', 'urltimeout', 'analyzertimeout', 'interactivetimeout', 'submit', 'submitandwait')
+    __order = ('buffer', 'choices', 'useragents', 'urltimeout', 'analyzertimeout', 'interactivetimeout', 'submit', 'submitandwait')
 
     def __iter__(self):
         temp_fields = list(super(BufferForm, self).__iter__())
@@ -1662,16 +1435,13 @@ class CustomViewBufferForm(BaseView):
                     for item in request.form.getlist("choices"):
                         result.update({item: True})
                     result["buffer"] = temp_form.buffer.data
-                    result["proxy"] = temp_form.proxy.data
+                    result["proxy"] = 'socks5://proxy:9050' if result.get('use_proxy') else ''
                     result["task"] = task
                     result["analyzer_timeout"] = temp_form.analyzertimeout.data
                     result["url_timeout"] = temp_form.urltimeout.data
                     result["interactive_timeout"] = temp_form.interactivetimeout.data
                     result["useragent"] = temp_form.useragents.data
                     result["useragent_mapped"] = SWITCHES_MAPPED[temp_form.useragents.data]
-                    if result['use_proxy']:
-                        if len(result['proxy']) == 0:
-                            result['proxy'] = 'socks5://proxy:9050'
                     _task = CELERY.send_task(json_settings[environ["project_env"]]["worker"]["name"],
                                              args=[result],
                                              queue=json_settings[environ["project_env"]]["worker"]["queue"])
@@ -1700,38 +1470,6 @@ class CustomViewBufferForm(BaseView):
         if not accessible then go to login
         '''
         return redirect(url_for('admin.login_view', next=request.url))
-
-
-def get_stats():
-    '''
-    get stats from databases
-    '''
-    stats = {}
-    with ignore_exception(Exception):
-        for coll in (defaultdb["reportscoll"], defaultdb["filescoll"], "fs.chunks", "fs.files"):
-            if coll in CLIENT[defaultdb["dbname"]].list_collection_names():
-                stats.update({"[{}] Collection".format(coll): "Exists"})
-            else:
-                stats.update({"[{}] Collection".format(coll): "Does not exists"})
-    with ignore_exception(Exception):
-        stats.update({"[Reports] Total reports": CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].count_documents({}),
-                      "[Reports] Total used space": "{}".format(convert_size(CLIENT[defaultdb["dbname"]].command("collstats", defaultdb["reportscoll"])["storageSize"] + CLIENT[defaultdb["dbname"]].command("collstats", defaultdb["reportscoll"])["totalIndexSize"]))})
-    with ignore_exception(Exception):
-        stats.update({"[Files] Total files uploaded": CLIENT[defaultdb["dbname"]][defaultdb["filescoll"]].count_documents({})})
-    with ignore_exception(Exception):
-        stats.update({"[Files] Total uploaded files size": "{}".format(convert_size(CLIENT[defaultdb["dbname"]]["fs.chunks"].count_documents({}) * 255 * 1000))})
-    with ignore_exception(Exception):
-        stats.update({"[Users] Total users": CLIENT[defaultdb["dbname"]][defaultdb["userscoll"]].count_documents({})})
-    with ignore_exception(Exception):
-        total, used, free = disk_usage("/")
-        stats.update({"CPU memory": cpu_percent(),
-                      "Memory used": virtual_memory()[2],
-                      "Current process used memory": "{}".format(convert_size(Process(getpid()).memory_info().rss)),
-                      "Total disk size": "{}".format(convert_size(total)),
-                      "Used disk size": "{}".format(convert_size(used)),
-                      "Free disk size": "{}".format(convert_size(free)),
-                      "Host platform": pplatform()})
-    return stats
 
 
 def _relative_time(dt):
@@ -1919,30 +1657,6 @@ class CustomTaskLogView(BaseView):
         return self.render("tasklog.html", task_id=task_id, target=target, logs=logs)
 
 
-class CustomStatsView(BaseView):
-    '''
-    Stats view
-    '''
-    @expose('/', methods=['GET'])
-    def index(self):
-        '''
-        state route
-        '''
-        return self.render("stats.html", stats=get_stats())
-
-    def is_accessible(self):
-        '''
-        is accessible
-        '''
-        return current_user.is_authenticated
-
-    def inaccessible_callback(self, name, **kwargs):
-        '''
-        if not accessible then go to login
-        '''
-        return redirect(url_for('admin.login_view', next=request.url))
-
-
 def find_and_srot(database, collection, key, var):
     '''
     hmm finding by time is weird?
@@ -2121,54 +1835,217 @@ def live_interact(task_id):
 
 
 
-class TimeEncoder(JSONEncoder):
-    '''
-    json encoder for time
-    '''
+def check_api_auth():
+    if current_user.is_authenticated:
+        return True
+    auth_header = request.headers.get("Authorization", "")
+    api_key_header = request.headers.get("X-API-Key", "")
+    token = ""
+    if api_key_header:
+        token = api_key_header.strip()
+    elif auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    from shared.settings import API_KEY
+    if token and token == API_KEY:
+        return True
+    return False
 
-    def default(self, obj):
-        '''
-        override default
-        '''
-        if isinstance(obj, datetime):
-            return obj.astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")
-        return JSONEncoder.default(self, obj)
+
+@APP.route('/api/v1/analyze', methods=['POST'])
+@CSRF.exempt
+def api_analyze():
+    if not check_api_auth():
+        return jsonify(error="Unauthorized. Provide valid X-API-Key or Bearer token."), 401
+
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or data.get("buffer") or "").strip()
+    if not url:
+        return jsonify(error="Missing required 'url' parameter."), 400
+
+    try:
+        validators.url(url)
+    except Exception:
+        return jsonify(error=f"Invalid URL format: '{url}'"), 400
+
+    task_id = str(uuid4())
+    result = {
+        "task": task_id,
+        "buffer": url,
+        "use_proxy": bool(data.get("use_tor", data.get("use_proxy", True))),
+        "proxy": data.get("proxy", "socks5://proxy:9050"),
+        "no_redirect": bool(data.get("no_redirect", False)),
+        "take_full_screenshot": bool(data.get("take_full_screenshot", False)),
+        "sniffer_on": bool(data.get("sniffer_on", False)),
+        "interactive": bool(data.get("interactive", False)),
+        "block_cookies": bool(data.get("block_cookies", True)),
+        "url_timeout": int(data.get("url_timeout", 10)),
+        "analyzer_timeout": int(data.get("analyzer_timeout", 60)),
+        "interactive_timeout": int(data.get("interactive_timeout", 300)),
+        "useragent": data.get("useragent", "Chrome"),
+        "useragent_mapped": SWITCHES_MAPPED.get(data.get("useragent", "Chrome"), SWITCHES_MAPPED['Chrome'])
+    }
+    if result['use_proxy'] and not result['proxy']:
+        result['proxy'] = 'socks5://proxy:9050'
+
+    CELERY.send_task(json_settings[environ["project_env"]]["worker"]["name"],
+                     args=[result],
+                     queue=json_settings[environ["project_env"]]["worker"]["queue"])
+
+    return jsonify({
+        "status": "queued",
+        "task_id": task_id,
+        "target_url": url,
+        "use_tor": result["use_proxy"],
+        "use_proxy": result["use_proxy"],
+        "created_at": datetime.utcnow().isoformat() + "Z"
+    }), 201
 
 
-def find_items_without_coll(database, collection, items):
-    '''
-    ???
-    '''
-    temp_dict = {}
-    for item in items:
-        if item != '':
-            temp_ret = CLIENT[database][collection].find_one({"_id": ObjectId(item)}, {'_id': False})
-            if temp_ret is not None:
-                temp_dict.update({item: temp_ret})
-    return temp_dict
+@APP.route('/api/v1/tasks/<task_id>', methods=['GET'])
+@CSRF.exempt
+def api_task_status(task_id):
+    if not check_api_auth():
+        return jsonify(error="Unauthorized."), 401
+
+    item = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one({"task": task_id})
+    if not item:
+        return jsonify(error=f"Task '{task_id}' not found."), 404
+
+    start = item.get("start")
+    end = item.get("end")
+    logs = item.get("logs") or []
+
+    if end:
+        status = "completed"
+    elif logs:
+        status = "running"
+    else:
+        status = "queued"
+
+    return jsonify({
+        "task_id": task_id,
+        "target_url": item.get("buffer", ""),
+        "status": status,
+        "submitted_at": start.isoformat() + "Z" if start else None,
+        "completed_at": end.isoformat() + "Z" if end else None,
+        "duration": _format_duration(start, end)
+    }), 200
+
+
+@APP.route('/api/v1/tasks/<task_id>/summary', methods=['GET'])
+@CSRF.exempt
+def api_task_summary(task_id):
+    if not check_api_auth():
+        return jsonify(error="Unauthorized."), 401
+
+    task_doc = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one({"task": task_id})
+    if not task_doc:
+        return jsonify(error=f"Task '{task_id}' not found."), 404
+
+    if not task_doc.get("end"):
+        return jsonify({
+            "task_id": task_id,
+            "status": "running" if task_doc.get("logs") else "queued",
+            "message": "Analysis is still in progress. Check back shortly."
+        }), 202
+
+    import json
+    ai_raw = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json; type=ai_summary"})
+    if ai_raw:
+        if isinstance(ai_raw, bytes):
+            ai_raw = ai_raw.decode('utf-8', 'ignore')
+        return APP.response_class(ai_raw, mimetype='application/json'), 200
+
+    raw_analyzer = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json"})
+    if not raw_analyzer:
+        return jsonify(error="Analysis output not found for this task."), 404
+
+    try:
+        if isinstance(raw_analyzer, bytes):
+            raw_analyzer = raw_analyzer.decode('utf-8', 'ignore')
+        parsed_analyzer = json.loads(raw_analyzer)
+        extracted = parsed_analyzer.get("extracted_table", {})
+        heuristics = extracted.get("ai_heuristics", {})
+        cert = extracted.get("Certificate", {})
+        dns = extracted.get("dns_records", [])
+
+        normal_img = parsed_analyzer.get("screenshot_table", {}).get("normal_image", "")
+        img_b64 = ""
+        if normal_img:
+            from binascii import unhexlify
+            from base64 import b64encode
+            img_b64 = f"data:image/jpeg;base64,{b64encode(unhexlify(normal_img.encode('utf-8'))).decode('utf-8')}"
+
+        fallback_summary = {
+            "task_id": task_id,
+            "status": "completed",
+            "url_analysis": {
+                "submitted_url": task_doc.get("buffer", ""),
+                "final_url": heuristics.get("final_url", task_doc.get("buffer", "")),
+                "initial_domain": task_doc.get("domain", ""),
+                "final_domain": heuristics.get("final_domain", task_doc.get("domain", "")),
+                "redirected": heuristics.get("redirected", False),
+                "is_punycode_homograph": heuristics.get("is_punycode", False)
+            },
+            "page_content": {
+                "page_title": heuristics.get("page_title", ""),
+                "has_password_field": heuristics.get("has_password_field", False),
+                "password_field_count": heuristics.get("password_field_count", 0),
+                "has_credential_inputs": heuristics.get("has_credential_inputs", False),
+                "has_credit_card_inputs": heuristics.get("has_credit_card_inputs", False),
+                "form_action_targets": heuristics.get("form_actions", []),
+                "detected_brands": heuristics.get("detected_brands", []),
+                "brand_domain_mismatch": heuristics.get("brand_domain_mismatch", False)
+            },
+            "ssl_certificate": {
+                "issuer": cert.get("Issuer", ""),
+                "subject": cert.get("Subjects", ""),
+                "valid_from": cert.get("Valid From", ""),
+                "valid_until": cert.get("Valid Until", ""),
+                "expired": cert.get("Expired", False)
+            },
+            "dns_records": dns,
+            "threat_indicators": heuristics.get("threat_indicators", []),
+            "screenshot_base64": img_b64,
+            "screenshot_url": f"/api/v1/tasks/{task_id}/screenshot"
+        }
+        return jsonify(fallback_summary), 200
+    except Exception as ex:
+        return jsonify(error=f"Error compiling summary: {str(ex)}"), 500
+
+
+@APP.route('/api/v1/tasks/<task_id>/screenshot', methods=['GET'])
+@CSRF.exempt
+def api_task_screenshot(task_id):
+    if not check_api_auth():
+        return jsonify(error="Unauthorized."), 401
+
+    import json
+    from binascii import unhexlify
+    from flask import Response
+
+    raw_analyzer = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json"})
+    if raw_analyzer:
+        try:
+            if isinstance(raw_analyzer, bytes):
+                raw_analyzer = raw_analyzer.decode('utf-8', 'ignore')
+            data = json.loads(raw_analyzer)
+            screenshots = data.get("screenshot_table", {})
+            ai_jpeg = screenshots.get("ai_image_jpeg")
+            if ai_jpeg:
+                return Response(unhexlify(ai_jpeg.encode('utf-8')), mimetype="image/jpeg")
+            normal = screenshots.get("normal_image")
+            if normal:
+                return Response(unhexlify(normal.encode('utf-8')), mimetype="image/png")
+        except Exception:
+            pass
+
+    return jsonify(error=f"Screenshot not found for task '{task_id}'."), 404
 
 
 class CustomMenuLink(MenuLink):
     '''
     items will the header top left
-    '''
-
-    def is_accessible(self):
-        '''
-        is accessible
-        '''
-        return current_user.is_authenticated
-
-    def inaccessible_callback(self, name, **kwargs):
-        '''
-        if not accessible then go to login
-        '''
-        return redirect(url_for('admin.login_view', next=request.url))
-
-
-class StarProject(MenuLink):
-    '''
-    ??
     '''
 
     def is_accessible(self):
@@ -2193,9 +2070,6 @@ ADMIN.add_view(CustomLogsView(name="Active Logs", endpoint='activelogs', menu_ic
 ADMIN.add_view(CustomReportView(name='Report', endpoint='report'))
 ADMIN.add_view(CustomTaskLogView(name='Task Log', endpoint='tasklog'))
 ADMIN.add_view(CheckTask('Task', endpoint='task', menu_icon_type='glyph', menu_icon_value='glyphicon-user'))
-
-#app.run(host = "127.0.0.1", ssl_context=(certsdir+'cert.pem', certsdir+'key.pem'))
-#app.run(host = "127.0.0.1", port= "8001", debug=True)
 
 
 @APP.before_request

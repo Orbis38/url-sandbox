@@ -3,35 +3,24 @@
     box -> sandbox
 '''
 
-from sys import argv
 from time import sleep
-from json import loads, dump, dumps
+from json import loads, dumps
 from warnings import filterwarnings
+from subprocess import Popen, DEVNULL
+import os
+from urllib.parse import urlparse
 from pyvirtualdisplay import Display
 from selenium import webdriver
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException
-from tinydb import TinyDB, Query
+from tinydb import TinyDB
 from binascii import hexlify
 from bs4 import BeautifulSoup
-from ssl import _ssl, get_server_certificate
-from tempfile import mkstemp
-from urllib.parse import urlparse
 from requests import get as rget, head as rhead
 from requests.packages.urllib3.connection import VerifiedHTTPSConnection
-from socket import gethostbyname
 from networkx import Graph, circular_layout
 from io import BytesIO
-from re import findall
-from PIL import Image
-from pytesseract import image_to_string
 from dns.resolver import resolve
 import matplotlib.pyplot as plt
 
@@ -55,26 +44,6 @@ def get_dns(parsed, extracted_table):
     except Exception as e:
         print(e)
         print("[SandBox] get_dns failed")
-
-
-def get_words(table, buffer):
-    try:
-        '''
-        get words from page
-        '''
-        words_list = []
-        image = Image.open(BytesIO(buffer))
-        image = image.convert("RGBA")
-        text = image_to_string(image, config='--psm 6')
-        print(text)
-        words_list = findall("[\x20-\x7e]{4,}", text)
-        table.insert({'all_words': words_list})
-        print("[SandBox] words saved")
-    except BaseException:
-        print("[SandBox] get_words failed")
-
-
-#os.environ['DISPLAY'] = ':0'
 
 def make_network(analyzer_table, network_graph):
     try:
@@ -132,13 +101,14 @@ def get_headers(parsed, extracted_table):
     try:
         response = None
         headers = {'User-Agent': parsed['useragent_mapped']}
-        if parsed['use_proxy']:
-            proxies = {'http': parsed['proxy'],
-                       'https': parsed['proxy']}
-            response = rhead(parsed['buffer'], proxies=proxies, headers=headers, timeout=2)
+        proxy_url = parsed.get('requests_proxy') or parsed.get('proxy')
+        if parsed.get('use_proxy') and proxy_url:
+            proxies = {'http': proxy_url,
+                       'https': proxy_url}
+            response = rhead(parsed['buffer'], proxies=proxies, headers=headers, timeout=10)
             response.headers['response_status'] = response.status_code
         else:
-            response = rhead(parsed['buffer'], headers=headers, timeout=2)
+            response = rhead(parsed['buffer'], headers=headers, timeout=10)
             response.headers['response_status'] = response.status_code
         if len(response.headers) > 0:
             extracted_table.insert({'Request_Headers': dict(response.request.headers)})
@@ -151,20 +121,53 @@ def get_headers(parsed, extracted_table):
 def get_cert(parsed, extracted_table):
     try:
         mapped = {b'CN': b'Common Name', b'OU': b'Organizational Unit', b'O': b'Organization', b'L': b'Locality', b'ST': b'State Or Province Name', b'C': b'Country Name'}
-        original_connect = VerifiedHTTPSConnection.connect
+        import OpenSSL.crypto
+        from urllib3.connection import HTTPSConnection
+        try:
+            from urllib3.contrib.socks import SOCKSHTTPSConnection
+        except Exception:
+            SOCKSHTTPSConnection = None
 
-        def hooked_connect(self):
+        global X509
+        X509 = None
+
+        def extract_x509(sock):
             global X509
-            original_connect(self)
-            X509 = self.sock.connection.get_peer_certificate()
-        VerifiedHTTPSConnection.connect = hooked_connect
+            try:
+                if hasattr(sock, 'connection'):
+                    X509 = sock.connection.get_peer_certificate()
+                elif hasattr(sock, 'getpeercert'):
+                    der = sock.getpeercert(binary_form=True)
+                    if der:
+                        X509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, der)
+            except Exception:
+                pass
+
+        orig_https = HTTPSConnection.connect
+        def hooked_https(self):
+            orig_https(self)
+            extract_x509(self.sock)
+        HTTPSConnection.connect = hooked_https
+
+        if SOCKSHTTPSConnection:
+            orig_socks = SOCKSHTTPSConnection.connect
+            def hooked_socks(self):
+                orig_socks(self)
+                extract_x509(self.sock)
+            SOCKSHTTPSConnection.connect = hooked_socks
+
         headers = {'User-Agent': parsed['useragent_mapped']}
-        if parsed['use_proxy']:
-            proxies = {'http': parsed['proxy'],
-                       'https': parsed['proxy']}
-            rget(parsed['buffer'], proxies=proxies, headers=headers, timeout=2)
+        proxy_url = parsed.get('requests_proxy') or parsed.get('proxy')
+        if parsed.get('use_proxy') and proxy_url:
+            proxies = {'http': proxy_url,
+                       'https': proxy_url}
+            rget(parsed['buffer'], proxies=proxies, headers=headers, timeout=10)
         else:
-            rget(parsed['buffer'], headers=headers, timeout=2)
+            rget(parsed['buffer'], headers=headers, timeout=10)
+
+        if not X509:
+            print("[SandBox] get_cert: no certificate captured")
+            return
         List_ = {}
         List_['Subjects'] = []
         for subject in X509.get_subject().get_components():
@@ -238,29 +241,168 @@ def get_all_scripts(html, extracted_table):
         print("[SandBox] get_all_links failed")
 
 
-def take_normal_screen_shot(driver, screenshot_table, words_table):
+def make_ai_screenshot_jpeg(png_bytes, max_size=(1280, 800), quality=82):
     '''
-    get normal screenshit
+    Create a compressed, downscaled JPEG specifically optimized for local AI vision models (Gemma)
+    '''
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(png_bytes)).convert('RGB')
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG', quality=quality, optimize=True)
+        return buf.getvalue()
+    except Exception as e:
+        print(f"[SandBox] make_ai_screenshot_jpeg failed: {e}", flush=True)
+        return None
+
+
+def take_normal_screen_shot(driver, screenshot_table):
+    '''
+    get normal screenshot and generate lightweight JPEG for AI vision (Gemma)
     '''
     try:
         screenshot = driver.get_screenshot_as_png()
-        screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
-        print("[SandBox] Screenshot saved")
-        # get_words(words_table,screenshot)
+        entry = {'normal_image': hexlify(screenshot).decode('utf-8')}
+        ai_jpeg = make_ai_screenshot_jpeg(screenshot)
+        if ai_jpeg:
+            entry['ai_image_jpeg'] = hexlify(ai_jpeg).decode('utf-8')
+        screenshot_table.insert(entry)
+        print("[SandBox] Screenshot saved (including AI vision JPEG)")
     except BaseException:
         print("[SandBox] take_normal_screen_shot failed")
 
 
-def take_full_screen_shot(driver, screenshot_table, words_table):
+def extract_phishing_heuristics(driver, parsed, extracted_table):
     '''
-    this function needs checking
+    Extract high-signal security heuristics for AI triage (Gemma) and playbooks
+    '''
+    try:
+        current_url = driver.current_url or parsed.get('buffer', '')
+        title = driver.title or ''
+        
+        init_parsed = urlparse(parsed.get('buffer', ''))
+        curr_parsed = urlparse(current_url)
+        initial_domain = init_parsed.netloc.split(':')[0]
+        final_domain = curr_parsed.netloc.split(':')[0]
+        redirected = (initial_domain.lower() != final_domain.lower()) or (parsed.get('buffer', '') != current_url)
+        is_punycode = 'xn--' in final_domain.lower()
+
+        dom_probe_js = """
+        try {
+            var forms = [];
+            var formEls = document.querySelectorAll('form');
+            for (var i = 0; i < formEls.length; i++) {
+                var f = formEls[i];
+                var action = f.getAttribute('action') || '';
+                var method = (f.getAttribute('method') || 'GET').toUpperCase();
+                forms.push({ action: action, method: method });
+            }
+            var pwds = document.querySelectorAll('input[type="password"]');
+            var emails = document.querySelectorAll('input[type="email"], input[name*="email" i], input[name*="user" i], input[name*="login" i], input[name*="usr" i]');
+            var ccs = document.querySelectorAll('input[name*="card" i], input[name*="cvv" i], input[name*="cvc" i], input[name*="exp" i]');
+            var bodyText = (document.body ? (document.body.innerText || document.body.textContent || '') : '').slice(0, 3000);
+            return {
+                forms: forms,
+                has_password: pwds.length > 0,
+                password_count: pwds.length,
+                has_credentials: (pwds.length > 0 || emails.length > 0),
+                has_credit_card: ccs.length > 0,
+                body_sample: bodyText
+            };
+        } catch(e) {
+            return { forms: [], has_password: false, password_count: 0, has_credentials: false, has_credit_card: false, body_sample: '' };
+        }
+        """
+        dom_data = driver.execute_script(dom_probe_js) or {}
+
+        COMMON_PHISHING_BRANDS = {
+            'Microsoft': ['microsoft.com', 'live.com', 'office.com', 'office365.com', 'microsoftonline.com', 'sharepoint.com', 'azure.com', 'msn.com', 'windows.com', 'outlook.com'],
+            'Google': ['google.com', 'google.it', 'gmail.com', 'youtube.com'],
+            'Apple': ['apple.com', 'icloud.com'],
+            'PayPal': ['paypal.com', 'paypal.me'],
+            'Amazon': ['amazon.com', 'amazon.it'],
+            'Netflix': ['netflix.com'],
+            'DHL': ['dhl.com', 'dhl.it', 'dhl-express.com'],
+            'FedEx': ['fedex.com'],
+            'UPS': ['ups.com'],
+            'Poste Italiane': ['poste.it', 'postepay.it'],
+            'Intesa Sanpaolo': ['intesasanpaolo.com'],
+            'UniCredit': ['unicredit.it'],
+            'DocuSign': ['docusign.com', 'docusign.net'],
+            'Meta': ['facebook.com', 'meta.com', 'instagram.com'],
+            'Adobe': ['adobe.com']
+        }
+
+        detected_brands = []
+        brand_mismatch = False
+        text_to_check = (title + " " + dom_data.get('body_sample', '')).lower()
+        
+        for brand_name, valid_domains in COMMON_PHISHING_BRANDS.items():
+            if brand_name.lower() in text_to_check:
+                detected_brands.append(brand_name)
+                is_legit = any(final_domain.lower() == vd or final_domain.lower().endswith('.' + vd) for vd in valid_domains)
+                if not is_legit:
+                    brand_mismatch = True
+
+        indicators = []
+        if dom_data.get('has_password'):
+            indicators.append('credential_input_present')
+        if dom_data.get('has_credit_card'):
+            indicators.append('credit_card_input_present')
+        if brand_mismatch:
+            indicators.append('brand_domain_mismatch')
+        if is_punycode:
+            indicators.append('punycode_homograph_domain')
+        if redirected:
+            indicators.append('cross_domain_redirect')
+        
+        form_actions = [f.get('action') for f in dom_data.get('forms', []) if f.get('action')]
+        for fa in form_actions:
+            if fa.startswith('http://') or fa.startswith('https://'):
+                act_domain = urlparse(fa).netloc.split(':')[0]
+                if act_domain.lower() != final_domain.lower() and act_domain:
+                    indicators.append('cross_domain_form_submission')
+                    break
+
+        if 'windows + r' in text_to_check or 'powershell' in text_to_check:
+            indicators.append('clickfix_powershell_lure')
+
+        heuristics = {
+            'submitted_url': parsed.get('buffer', ''),
+            'final_url': current_url,
+            'initial_domain': initial_domain,
+            'final_domain': final_domain,
+            'redirected': redirected,
+            'is_punycode': is_punycode,
+            'page_title': title,
+            'has_password_field': dom_data.get('has_password', False),
+            'password_field_count': dom_data.get('password_count', 0),
+            'has_credential_inputs': dom_data.get('has_credentials', False),
+            'has_credit_card_inputs': dom_data.get('has_credit_card', False),
+            'form_actions': form_actions,
+            'detected_brands': detected_brands,
+            'brand_domain_mismatch': brand_mismatch,
+            'threat_indicators': indicators
+        }
+        extracted_table.insert({'ai_heuristics': heuristics})
+        print(f"[SandBox] Extracted AI heuristics (indicators: {indicators})", flush=True)
+        return heuristics
+    except Exception as e:
+        print(f"[SandBox] extract_phishing_heuristics failed: {e}", flush=True)
+        return {}
+
+
+def take_full_screen_shot(driver, screenshot_table):
+    '''
+    capture full screenshot
     '''
     try:
         element = driver.find_element(By.TAG_NAME, 'html')
         screenshot = element.get_screenshot_as_png()
         screenshot_table.insert({'full_image': hexlify(screenshot).decode('utf-8')})
         print("[SandBox] Screenshot saved")
-        # get_words(words_table,screenshot)
     except BaseException:
         print("[SandBox] take_full_screen_shot failed")
 
@@ -288,8 +430,6 @@ def parse_ouput(logs, table):
     try:
         performance_events = [loads(e['message'])['message'] for e in logs]
         network_events = [e for e in performance_events if 'network.' in e['method'].lower()]
-        #temp_list = [e for e in network_events if find_key("headers",e) is not None]
-        temp_list = []
         for _ in network_events:
             rec = find_key("headers", _)
             if rec:
@@ -371,11 +511,47 @@ def chrome_driver(parsed, analyzer_db):
     init webdriver and submit parsed options
     '''
     DISPLAY.start()
+    vnc_processes = []
+    if parsed.get('interactive'):
+        disp = getattr(DISPLAY, 'new_display_var', None) or os.environ.get("DISPLAY", ":0")
+        os.environ["DISPLAY"] = disp
+        print(f"[SandBox] Starting X11 desktop environment on {disp} for live 30 FPS interactive session", flush=True)
+        try:
+            ob_proc = Popen(["openbox"], stdout=DEVNULL, stderr=DEVNULL)
+            vnc_processes.append(ob_proc)
+        except Exception as e:
+            print(f"[SandBox] Warning starting openbox: {e}", flush=True)
+        try:
+            vnc_proc = Popen([
+                "x11vnc",
+                "-display", disp,
+                "-rfbport", "5900",
+                "-shared",
+                "-forever",
+                "-nopw",
+                "-wait", "33",
+                "-defer", "20",
+                "-repeat",
+                "-cursor", "arrow"
+            ], stdout=DEVNULL, stderr=DEVNULL)
+            vnc_processes.append(vnc_proc)
+        except Exception as e:
+            print(f"[SandBox] Warning starting x11vnc: {e}", flush=True)
+        try:
+            ws_proc = Popen([
+                "websockify",
+                "--web", "/usr/share/novnc",
+                "6080",
+                "localhost:5900"
+            ], stdout=DEVNULL, stderr=DEVNULL)
+            vnc_processes.append(ws_proc)
+        except Exception as e:
+            print(f"[SandBox] Warning starting websockify: {e}", flush=True)
+
     analyzer_table = analyzer_db.table('analyzer_table')
     extracted_table = analyzer_db.table('extracted_table')
     screenshot_table = analyzer_db.table('screenshot_table')
     network_table = analyzer_db.table('network_table')
-    words_table = analyzer_db.table('words_table')
     get_dns(parsed, extracted_table)
     get_headers(parsed, extracted_table)
     chrome_options = ChromeOptions()
@@ -383,14 +559,27 @@ def chrome_driver(parsed, analyzer_db):
     # font and tracker to finish — big speedup on heavy pages, screenshot still
     # captures the rendered document.
     chrome_options.page_load_strategy = 'eager'
-    chrome_options.add_argument('--headless')
+    if parsed.get('interactive'):
+        chrome_options.add_argument('--window-size=1440,900')
+        chrome_options.add_argument('--window-position=0,0')
+        chrome_options.add_argument('--start-maximized')
+        chrome_options.add_argument('--disable-infobars')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--no-first-run')
+        chrome_options.add_argument('--no-default-browser-check')
+    else:
+        chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--user-agent={}'.format(parsed['useragent_mapped']))
-    if parsed['use_proxy']:
+    if parsed.get('use_proxy') and parsed.get('proxy'):
         chrome_options.add_argument('--proxy-server=%s' % parsed['proxy'])
     # Always deny permission prompts (notifications, geolocation, camera/mic) so
     # they never steal focus or appear in the captured screenshot. 2 == block.
     chrome_options.add_argument('--deny-permission-prompts')
+    # Anti-bot detection / stealth: hide navigator.webdriver
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     chrome_options.add_experimental_option('prefs', {
         'profile.default_content_setting_values.notifications': 2,
         'profile.default_content_setting_values.geolocation': 2,
@@ -427,7 +616,6 @@ def chrome_driver(parsed, analyzer_db):
             chromebrowser.get(parsed["buffer"])
         except BaseException:
             pass
-        # WebDriverWait(chromebrowser,1).until(EC.visibility_of_element_located((By.TAG_NAME,'body'))).send_keys(Keys.ESCAPE)
     else:
         chromebrowser.implicitly_wait(int(parsed["url_timeout"]))
         try:
@@ -440,9 +628,10 @@ def chrome_driver(parsed, analyzer_db):
     get_cert(parsed, extracted_table)
     get_all_links(chromebrowser.page_source, extracted_table)
     get_all_scripts(chromebrowser.page_source, extracted_table)
+    extract_phishing_heuristics(chromebrowser, parsed, extracted_table)
     if parsed['take_full_screenshot']:
-        take_full_screen_shot(chromebrowser, screenshot_table, words_table)
-    take_normal_screen_shot(chromebrowser, screenshot_table, words_table)
+        take_full_screen_shot(chromebrowser, screenshot_table)
+    take_normal_screen_shot(chromebrowser, screenshot_table)
     parse_ouput(performance_logs, analyzer_table)
     make_network(analyzer_table, network_table)
     if parsed.get('interactive') and interactive_server is not None:
@@ -454,6 +643,15 @@ def chrome_driver(parsed, analyzer_db):
         signal_analysis_done(parsed)
         serve_interactive(interactive_server, chromebrowser, parsed, analyzer_db)
     chromebrowser.quit()
+    for p in vnc_processes:
+        try:
+            p.terminate()
+            p.wait(timeout=2)
+        except Exception:
+            try:
+                p.kill()
+            except Exception:
+                pass
     DISPLAY.stop()
     print("[SandBox] main logic done")
 
@@ -590,8 +788,15 @@ def serve_interactive(server, driver, parsed, analyzer_db):
                     time.sleep(0.2)
                     
                 elif action == 'close':
-                    print("[SandBox] Close requested. Shutting down interactive server.", flush=True)
-                    conn.sendall(json.dumps({"status": "ok", "message": "closed"}).encode('utf-8'))
+                    print("[SandBox] Close requested. Capturing final state & shutting down interactive server.", flush=True)
+                    try:
+                        screenshot = driver.get_screenshot_as_png()
+                        screenshot_table.truncate()
+                        screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                        img_base64 = b64encode(screenshot).decode('utf-8')
+                        conn.sendall(json.dumps({"status": "ok", "message": "closed", "screenshot": img_base64}).encode('utf-8'))
+                    except Exception as se:
+                        conn.sendall(json.dumps({"status": "ok", "message": "closed"}).encode('utf-8'))
                     conn.close()
                     break
                     

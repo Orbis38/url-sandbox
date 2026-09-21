@@ -2,13 +2,11 @@
 {% block body %}
 {{ super() }}
 {% set switch_desc = {
-   'full_analysis': 'Run every analysis module against the target',
-   'use_proxy': 'Route resolution and traffic through the internal proxy',
+   'use_proxy': 'Route traffic through Tor network with fresh IP rotation per run',
    'no_redirect': 'Capture the first response only, no follow-through',
-   'random_click': 'Simulate user interaction on the target page',
    'take_full_screenshot': 'Capture a full-page screenshot of the target',
-   'sniffer_on': 'Record network traffic during sandbox execution',
-   'interactive': 'Keep the sandbox session open for manual interaction',
+   'sniffer_on': 'Capture raw packet-level network traffic (Scapy) on the network interface',
+   'interactive': 'Full real-time interactive browser session (30 FPS, scroll, click, type)',
    'block_cookies': 'Auto-dismiss cookie consent banners so they stay out of the screenshot'
 } %}
 <div class="up-submit-grid">
@@ -36,10 +34,6 @@
             <div class="up-divider"></div>
             <div class="up-field-label">Advanced</div>
             <div class="up-adv-grid">
-               <div>
-                  <div class="up-field-label">Proxy</div>
-                  {{ form.proxy }}
-               </div>
                <div>
                   <div class="up-field-label">User agent</div>
                   {{ form.useragents }}

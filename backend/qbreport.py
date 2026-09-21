@@ -3,31 +3,15 @@
     backend -> report
 '''
 
-from os import path
-from json import loads, dumps, JSONEncoder
-from pickle import load as pload
+from json import dumps
 from base64 import b64encode
 from datetime import datetime
-from tinydb import TinyDB, Query
+from tinydb import TinyDB
 from binascii import unhexlify
 from jinja2 import Template, Environment, FileSystemLoader
 from shared.logger import log_string, ignore_exception
 from shared.settings import defaultdb
 from shared.mongodbconn import add_item_fs, find_item
-
-
-class ComplexEncoder(JSONEncoder):
-    '''
-    this will be used to encode objects
-    '''
-
-    def default(self, obj):
-        '''
-        override default
-        '''
-        if not isinstance(obj, str):
-            return str(obj)
-        return JSONEncoder.default(self, obj)
 
 
 def pretty_json(value):
@@ -163,6 +147,74 @@ def make_report(parsed):
     with open(analyzer_path) as file:
         temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], file.read(), parsed['task'], None, parsed['task'], "application/json", datetime.now())
 
+    # Build & store AI-ready multimodal summary for Playbooks & local LLMs (Gemma)
+    with ignore_exception(Exception):
+        extracted_table = analyzer_db.table('extracted_table')
+        heuristics_item = extracted_table.search(lambda x: x if 'ai_heuristics' in x else 0)
+        heuristics = heuristics_item[0]['ai_heuristics'] if heuristics_item else {}
+
+        cert_item = extracted_table.search(lambda x: x if 'Certificate' in x else 0)
+        cert = cert_item[0]['Certificate'] if cert_item else {}
+
+        dns_item = extracted_table.search(lambda x: x if 'dns_records' in x else 0)
+        dns = dns_item[0]['dns_records'] if dns_item else []
+
+        screenshot_table = analyzer_db.table('screenshot_table')
+        ai_img_item = screenshot_table.search(lambda x: x if 'ai_image_jpeg' in x else 0)
+        normal_img_item = screenshot_table.search(lambda x: x if 'normal_image' in x else 0)
+
+        ai_jpeg_b64 = ""
+        if ai_img_item:
+            ai_jpeg_b64 = b64encode(unhexlify(ai_img_item[0]['ai_image_jpeg'].encode('utf-8'))).decode('utf-8')
+        elif normal_img_item:
+            try:
+                from PIL import Image
+                import io
+                raw_png = unhexlify(normal_img_item[0]['normal_image'].encode('utf-8'))
+                img = Image.open(io.BytesIO(raw_png)).convert('RGB')
+                img.thumbnail((1280, 800), Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG', quality=82, optimize=True)
+                ai_jpeg_b64 = b64encode(buf.getvalue()).decode('utf-8')
+            except Exception:
+                ai_jpeg_b64 = b64encode(unhexlify(normal_img_item[0]['normal_image'].encode('utf-8'))).decode('utf-8')
+
+        ai_summary_dict = {
+            "task_id": parsed['task'],
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "url_analysis": {
+                "submitted_url": heuristics.get('submitted_url', parsed.get('buffer', '')),
+                "final_url": heuristics.get('final_url', parsed.get('buffer', '')),
+                "initial_domain": heuristics.get('initial_domain', parsed.get('domain', '')),
+                "final_domain": heuristics.get('final_domain', parsed.get('domain', '')),
+                "redirected": heuristics.get('redirected', False),
+                "is_punycode_homograph": heuristics.get('is_punycode', False)
+            },
+            "page_content": {
+                "page_title": heuristics.get('page_title', ''),
+                "has_password_field": heuristics.get('has_password_field', False),
+                "password_field_count": heuristics.get('password_field_count', 0),
+                "has_credential_inputs": heuristics.get('has_credential_inputs', False),
+                "has_credit_card_inputs": heuristics.get('has_credit_card_inputs', False),
+                "form_action_targets": heuristics.get('form_actions', []),
+                "detected_brands": heuristics.get('detected_brands', []),
+                "brand_domain_mismatch": heuristics.get('brand_domain_mismatch', False)
+            },
+            "ssl_certificate": {
+                "issuer": [list(x.values())[0] for x in cert.get('Issuer', []) if isinstance(x, dict)] or cert.get('Issuer', ''),
+                "subject": [list(x.values())[0] for x in cert.get('Subjects', []) if isinstance(x, dict)] or cert.get('Subjects', ''),
+                "valid_from": cert.get('Valid From', ''),
+                "valid_until": cert.get('Valid Until', ''),
+                "expired": cert.get('Expired', False)
+            },
+            "dns_records": dns,
+            "threat_indicators": heuristics.get('threat_indicators', []),
+            "screenshot_base64": f"data:image/jpeg;base64,{ai_jpeg_b64}" if ai_jpeg_b64 else "",
+            "screenshot_url": f"/api/v1/tasks/{parsed['task']}/screenshot"
+        }
+        add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(ai_summary_dict), parsed['task'], None, parsed['task'], "application/json; type=ai_summary", datetime.now())
+        log_string("Saved AI multimodal summary to GridFS", task=parsed['task'])
+
     # Interactive intro note renders above the screenshot.
     if parsed.get('interactive'):
         table += "<!--INTERACTIVE_INTRO-->"
@@ -241,6 +293,12 @@ def make_report(parsed):
             table += make_json_table_no_loop(ENV_JINJA2, item[0]["extracted_scripts"], "Extracted scripts")
 
     with ignore_exception(Exception):
+        extracted_table = analyzer_db.table('extracted_table')
+        heuristics_item = extracted_table.search(lambda x: x if 'ai_heuristics' in x else 0)
+        if heuristics_item:
+            table += make_json_table_no_loop(ENV_JINJA2, heuristics_item[0]['ai_heuristics'], "Security & Phishing Heuristics")
+
+    with ignore_exception(Exception):
         analyzer_table = analyzer_db.table('analyzer_table')
         if len(analyzer_table.all()) > 0:
             table += make_json_table(ENV_JINJA2, analyzer_table.all(), "Browser")
@@ -251,99 +309,167 @@ def make_report(parsed):
             table += make_json_table_no_loop(ENV_JINJA2, sniffer_table.all(), "Sniffer")
 
     if parsed.get('interactive'):
-        intro_html = """
-        <div style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;padding:12px 16px;border:1px solid rgba(124,140,248,0.4);border-radius:10px;background:var(--up-accent-soft,rgba(124,140,248,0.16));color:var(--up-accent-text,#aab4ff);font-size:13px;line-height:1.45">
-            <span style="flex-shrink:0;width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--up-green,#5ad19b);box-shadow:0 0 0 3px rgba(90,209,155,0.2)"></span>
-            <div><strong>This session is live and interactive.</strong> Click anywhere on the screenshot to click that exact spot inside the sandbox, or use the scroll buttons below it to move down the page. The screenshot refreshes after every action.</div>
-        </div>
-        """
-
-        controls_html = """
+        vnc_port = int(parsed.get('vnc_port', 6080) or 6080)
+        widget_html = f"""
         <style>
-            #interactive-controls .up-live-btn{display:inline-flex;align-items:center;gap:6px;background:var(--up-accent,#5b6ef5);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-family:inherit;font-weight:600;font-size:12.5px;cursor:pointer;transition:background .15s}
-            #interactive-controls .up-live-btn:hover{background:oklch(0.67 0.19 264)}
-            #interactive-controls .up-live-btn:active{background:oklch(0.57 0.19 264)}
+            .up-interactive-widget {{
+                margin: 0 0 24px 0;
+                border: 1px solid rgba(124,140,248,0.35);
+                border-radius: 12px;
+                background: #111420;
+                box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+                overflow: hidden;
+            }}
+            .up-interactive-header {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 16px;
+                background: #171b2e;
+                border-bottom: 1px solid rgba(124,140,248,0.2);
+                flex-wrap: wrap;
+                gap: 10px;
+            }}
+            .up-live-badge {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                color: #e2e8f0;
+                font-weight: 600;
+                font-size: 13px;
+            }}
+            .up-live-dot {{
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: #22c55e;
+                box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.3);
+                animation: up-pulse 2s infinite;
+            }}
+            @keyframes up-pulse {{
+                0% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }}
+                70% {{ box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }}
+                100% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }}
+            }}
+            .up-interactive-actions {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }}
+            .up-btn-primary, .up-btn-secondary, .up-btn-danger {{
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                font-family: inherit;
+                font-size: 12px;
+                font-weight: 600;
+                padding: 6px 12px;
+                border-radius: 6px;
+                border: none;
+                cursor: pointer;
+                transition: all .15s ease-in-out;
+                text-decoration: none;
+            }}
+            .up-btn-primary {{ background: #6366f1; color: #fff; }}
+            .up-btn-primary:hover {{ background: #4f46e5; }}
+            .up-btn-secondary {{ background: #334155; color: #cbd5e1; }}
+            .up-btn-secondary:hover {{ background: #475569; color: #fff; }}
+            .up-btn-danger {{ background: #ef4444; color: #fff; }}
+            .up-btn-danger:hover {{ background: #dc2626; }}
+            .up-vnc-frame-container {{
+                position: relative;
+                width: 100%;
+                height: 720px;
+                background: #000;
+            }}
+            .up-vnc-frame-container iframe {{
+                width: 100%;
+                height: 100%;
+                border: none;
+                display: block;
+            }}
         </style>
-        <div id="interactive-controls" style="display:flex;align-items:center;gap:8px;margin:14px 0 4px">
-            <button type="button" class="up-live-btn" onclick="scrollLive(-300)">&uarr; Scroll up</button>
-            <button type="button" class="up-live-btn" onclick="scrollLive(300)">&darr; Scroll down</button>
-            <span id="interaction-status" style="margin-left:10px;font-size:12px;font-style:italic;color:var(--up-muted,#8a8f98);min-height:16px"></span>
-        </div>
-        <script>
-            (function () {
-                var TASK = '""" + parsed['task'] + """';
 
-                function sendAction(action, params) {
+        <div class="up-interactive-widget" id="interactive-widget">
+            <div class="up-interactive-header">
+                <div class="up-live-badge">
+                    <span class="up-live-dot" id="live-indicator-dot"></span>
+                    <span id="live-status-title">Live Interactive Browser (30 FPS &bull; 1440&times;900)</span>
+                    <span id="live-session-info" style="color: #94a3b8; font-weight: normal; font-size: 12px; margin-left: 6px;">
+                        Direct navigation: scroll, click, and type in real time
+                    </span>
+                </div>
+                <div class="up-interactive-actions">
+                    <button type="button" class="up-btn-secondary" id="btn-fullscreen" onclick="toggleVncFullscreen()">⛶ Fullscreen</button>
+                    <a href="#" target="_blank" class="up-btn-secondary" id="btn-newtab">⎘ Open in New Tab</a>
+                    <button type="button" class="up-btn-danger" id="btn-finish" onclick="finishLiveSession()">✓ Finish Session</button>
+                </div>
+            </div>
+            <div class="up-vnc-frame-container" id="vnc-container">
+                <iframe id="novnc-frame" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
+            </div>
+        </div>
+
+        <script>
+            (function () {{
+                var TASK = '{parsed['task']}';
+                var VNC_PORT = {vnc_port};
+                var host = window.location.hostname || 'localhost';
+                var proto = window.location.protocol;
+                var vncUrl = proto + '//' + host + ':' + VNC_PORT + '/vnc.html?autoconnect=true&resize=scale&reconnect=true';
+
+                function initVnc() {{
                     var $ = window.jQuery;
-                    var statusDiv = $('#interaction-status');
-                    statusDiv.text('Sending ' + action + '…');
-                    var data = $.extend({ action: action }, params);
-                    $.ajax({
+                    $('#novnc-frame').attr('src', vncUrl);
+                    $('#btn-newtab').attr('href', vncUrl);
+                }}
+
+                window.toggleVncFullscreen = function() {{
+                    var el = document.getElementById('vnc-container');
+                    if (!document.fullscreenElement) {{
+                        if (el.requestFullscreen) {{ el.requestFullscreen(); }}
+                        else if (el.webkitRequestFullscreen) {{ el.webkitRequestFullscreen(); }}
+                    }} else {{
+                        if (document.exitFullscreen) {{ document.exitFullscreen(); }}
+                    }}
+                }};
+
+                window.finishLiveSession = function() {{
+                    var $ = window.jQuery;
+                    if (!confirm('Finish interactive session and save the final report state?')) return;
+                    var btn = $('#btn-finish');
+                    btn.prop('disabled', true).text('Saving final state…');
+                    $('#live-status-title').text('Session terminating…');
+                    $('#live-indicator-dot').css('background', '#f59e0b');
+
+                    $.ajax({{
                         url: '/live_interact/' + TASK,
                         type: 'POST',
                         contentType: 'application/json',
-                        data: JSON.stringify(data),
-                        success: function(response) {
-                            if (response.status === 'ok') {
-                                if (response.screenshot) {
-                                    $('#live-screenshot').attr('src', 'data:image/jpeg;base64, ' + response.screenshot);
-                                }
-                                if (response.full_screenshot) {
-                                    $('#live-full-screenshot').attr('src', 'data:image/jpeg;base64, ' + response.full_screenshot);
-                                }
-                                statusDiv.text('Done.');
-                                setTimeout(function() { statusDiv.text(''); }, 1500);
-                            } else {
-                                statusDiv.text('Error: ' + (response.error || 'unknown error'));
-                            }
-                        },
-                        error: function(xhr) {
-                            var err = xhr.responseJSON ? xhr.responseJSON.error : 'Connection error';
-                            statusDiv.text('Error: ' + err);
-                        }
-                    });
-                }
+                        data: JSON.stringify({{ action: 'close' }}),
+                        success: function(resp) {{
+                            $('#live-status-title').text('Session completed.');
+                            $('#live-indicator-dot').css('background', '#64748b');
+                            setTimeout(function() {{
+                                window.location.reload();
+                            }}, 1000);
+                        }},
+                        error: function() {{
+                            window.location.reload();
+                        }}
+                    }});
+                }};
 
-                // Exposed for the inline onclick handlers on the scroll buttons.
-                window.sendAction = sendAction;
-                window.scrollLive = function(amount) { sendAction('scroll', { amount: amount }); };
-
-                function bindImage($, sel, id, isFull) {
-                    var img = $(sel);
-                    if (!img.length) { return; }
-                    img.attr('id', id);
-                    img.css({ 'cursor': 'crosshair', 'border': '2px solid var(--up-accent,#5b6ef5)', 'border-radius': '8px', 'width': '100%', 'max-width': '100%', 'display': 'block' });
-                    img.off('click.interactive').on('click.interactive', function(e) {
-                        var rect = this.getBoundingClientRect();
-                        var x = e.clientX - rect.left;
-                        var y = e.clientY - rect.top;
-                        var naturalWidth = this.naturalWidth || 800;
-                        var naturalHeight = this.naturalHeight || 600;
-                        var clickX = Math.round((x / rect.width) * naturalWidth);
-                        var clickY = Math.round((y / rect.height) * naturalHeight);
-                        sendAction('click', { x: clickX, y: clickY, is_full: isFull });
-                    });
-                }
-
-                function init() {
-                    var $ = window.jQuery;
-                    $('.table-Screenshot').show();
-                    bindImage($, '.table-Screenshot img', 'live-screenshot', false);
-                    bindImage($, '.table-Full_Screenshot img', 'live-full-screenshot', true);
-                }
-
-                // flask-admin loads jQuery in the page footer, so this inline
-                // script can run before jQuery exists. Wait for it, then bind.
-                (function ready() {
-                    if (typeof window.jQuery === 'undefined') { return setTimeout(ready, 50); }
-                    window.jQuery(function () { init(); });
-                })();
-            })();
+                (function ready() {{
+                    if (typeof window.jQuery === 'undefined') {{ return setTimeout(ready, 50); }}
+                    window.jQuery(function () {{ initVnc(); }});
+                }})();
+            }})();
         </script>
         """
 
-        table = table.replace("<!--INTERACTIVE_INTRO-->", intro_html)
-        table = table.replace("<!--INTERACTIVE_CONTROLS-->", controls_html)
+        table = table.replace("<!--INTERACTIVE_INTRO-->", widget_html)
+        table = table.replace("<!--INTERACTIVE_CONTROLS-->", "")
 
     all_logs = find_item(defaultdb["dbname"], defaultdb["taskdblogscoll"], {'task': parsed['task']})
     if all_logs:

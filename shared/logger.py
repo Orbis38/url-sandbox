@@ -3,35 +3,11 @@
     shared -> logger
 '''
 
-from os import path, environ
 from sys import stdout
 from datetime import datetime
-from tempfile import gettempdir
 from contextlib import contextmanager
-from logging import DEBUG, Handler, WARNING, getLogger
-from shared.settings import json_settings, defaultdb
-from shared.mongodbconn import add_item_fs, add_item, update_task, update_task_by_uuid
-
-
-class TerminalColors:
-    '''
-    Colors (add more)
-    '''
-    Restore = '\033[0m'
-    Black = "\033[030m"
-    Red = "\033[91m"
-    Green = "\033[32m"
-    Yellow = "\033[33m"
-    Blue = "\033[34m"
-    Purple = "\033[35m"
-    Cyan = "\033[36m"
-    White = "\033[37m"
-
-
-GREEN_X = '{}{}{}'.format(TerminalColors.Green, "X", TerminalColors.Restore)
-YELLOW_ARROW = '{}{}{}'.format(TerminalColors.Yellow, ">", TerminalColors.Restore)
-EXCLAMATION_MARK = '{}{}{}'.format(TerminalColors.Yellow, "!", TerminalColors.Restore)
-RED_ARROW = '{}{}{}'.format(TerminalColors.Red, ">", TerminalColors.Restore)
+from shared.settings import defaultdb
+from shared.mongodbconn import add_item, update_task, update_task_by_uuid
 
 
 @contextmanager
@@ -42,14 +18,7 @@ def ignore_exception(*exceptions):
     try:
         yield
     except exceptions as error:
-        #print("{} {} {}".format(datetime.utcnow(), EXCLAMATION_MARK, error))
         pass
-
-
-def combine_2_dict(a, b):
-    z = a.copy()
-    z.update(b)
-    return z
 
 
 def setup_task_logger(parsed):

@@ -14,3 +14,4 @@ pysocks
 networkx
 matplotlib
 dnspython
+websockify

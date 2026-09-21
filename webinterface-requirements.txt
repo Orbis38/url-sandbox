@@ -17,3 +17,4 @@ redis
 celery
 beautifulsoup4
 validator_collection
+Pillow

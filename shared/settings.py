@@ -1,5 +1,8 @@
 __V__ = "2020.V.02.39"
 
+from os import environ
+API_KEY = environ.get("URL_SANDBOX_API_KEY", "urlsandbox_default_api_key_change_in_production")
+
 defaultdb = {
     "dbname": "urlsandbox",
     "reportscoll": "reports",
@@ -48,44 +51,6 @@ meta_users_settings = {
     'db_alias': 'default',
     'collection': defaultdb["userscoll"],
     'strict': False
-}
-meta_files_settings = {
-    'db_alias': 'default',
-    'collection': defaultdb["filescoll"],
-    'strict': False
-}
-meta_reports_settings = {
-    'db_alias': 'default',
-    'collection': defaultdb["reportscoll"],
-    'strict': False
-}
-meta_task_files_logs_settings = {
-    'db_alias': 'default',
-    'collection': defaultdb["taskfileslogscoll"],
-    'strict': False
-}
-meta_task_logs_settings = {
-    'db_alias': 'default',
-    'collection': defaultdb["taskdblogscoll"],
-    'strict': False
-}
-elastic_db = {
-    u'host': u'elasticsearch',
-    u'port': 9200
-}
-
-default_colors = {
-    "mobile_malware_index": "yellow_color",
-    "packers_index": "brown_color",
-    "capabilities_index": "green_color",
-    "antidebug_antivm_index": "light_blue_color",
-    "exploit_kits_index": "cyan_color",
-    "crypto_index": "lilac_color",
-    "cve_rules_index": "orange_color",
-    "malware_index": "red_color",
-    "maldocs_index": "lavender_color",
-    "webshells_index": "ochre_color",
-    "email_index": "mauve_color"
 }
 
 
