@@ -1,51 +1,379 @@
 <p align="center"> <img src="UrlProbe_icon.png" width="128"></p>
 <h1 align="center">UrlProbe</h1>
 
-[![Generic badge](https://img.shields.io/badge/dynamic/json.svg?url=https://raw.githubusercontent.com/qeeqbox/url-sandbox/master/info&label=version&query=$.version&colorB=blue&style=flat-square)](https://github.com/qeeqbox/url-sandbox/blob/master/changes.md)  [![Generic badge](https://img.shields.io/badge/dynamic/json.svg?url=https://raw.githubusercontent.com/qeeqbox/url-sandbox/master/info&label=build&query=$.dockercomposebuild&colorB=green&style=flat-square)](https://github.com/qeeqbox/url-sandbox/blob/master/changes.md) [![Generic badge](https://img.shields.io/badge/dynamic/json.svg?url=https://raw.githubusercontent.com/qeeqbox/url-sandbox/master/info&label=test&query=$.automatedtest&colorB=green&style=flat-square)](https://github.com/qeeqbox/url-sandbox/blob/master/changes.md) [![Generic badge](https://img.shields.io/static/v1?label=%F0%9F%91%8D&message=!&color=yellow&style=flat-square)](https://github.com/qeeqbox/url-sandbox/stargazers)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=flat-square)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Engine%20%26%20Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 
-UrlProbe (formerly qeeqbox url-sandbox) automates the daily task of analyzing URL or Domains internally without external resources' interaction. It contains a sandbox module that executes the target in an isolated environment (Customizable). The output from that environment is parsed and structured into useful categories. Some of those categories are visualized for better user experience. This project is scalable and can be integrated into your SOC.
+**UrlProbe** is an automated, enterprise-grade threat analysis platform and web sandbox engineered to safely investigate suspicious URLs, phishing campaigns, credential harvesting pages, and malicious redirections in an isolated containerized ecosystem.
 
-## Install
-```git clone https://github.com/qeeqbox/url-sandbox.git && cd url-sandbox && chmod +x run.sh && ./run.sh auto_configure```
+UrlProbe spins up ephemeral browser sandboxes equipped with anti-bot evasion techniques, real-time **30 FPS interactive desktop sessions (VNC)** with support for **up to 5 concurrent sessions**, **MP4 session video recording**, **per-analysis Tor IP rotation**, deep network telemetry (DNS, TLS, HTTP waterfalls, Scapy packet inspection), and a comprehensive **REST API** with local **multimodal AI vision assessment** (Gemma / Ollama) for SOC and SOAR incident response automation.
 
-## Interface
-<img src="https://raw.githubusercontent.com/qeeqbox/url-sandbox/master/readme/intro.gif" style="max-width:768px"/>
+---
 
-## Features  
-<ul>
-<li>Runs locally</li>
-<li>DNS info</li>
-<li>Headers info</li>
-<li>Brwoser info</li>
-<li>Certifcate extraction</li>
-<li>Target screenshot</li>
-<li>Network graph image</li>
-<li>Internal sniffer</li>
-<li>Custom User Agent</li>
-<li>Custom DNS and Proxy options</li>
-<li>Auto Tor configuration</li>
-<li>HTML and JSON output</li>
-<li>No-redirect option</li>
-</ul>
+## Table of Contents
+1. [Key Capabilities](#key-capabilities)
+2. [Required Network Ports](#required-network-ports)
+3. [System Architecture](#system-architecture)
+4. [Analysis Execution Lifecycle](#analysis-execution-lifecycle)
+5. [Interactive VNC Architecture & Concurrency](#interactive-vnc-architecture--concurrency)
+6. [Data Persistence & Retention Policy](#data-persistence--retention-policy)
+7. [REST API Documentation](#rest-api-documentation)
+8. [Installation & Deployment](#installation--deployment)
+9. [Operational Commands](#operational-commands)
+10. [Security & Production Hardening](#security--production-hardening)
+11. [License](#license)
 
-## Running
-#### One click auto-configure
-git clone https://github.com/qeeqbox/url-sandbox.git <br>
-cd url-sandbox <br>
-chmod +x run.sh <br>
-./run.sh auto_configure <br>
+---
 
-The project interface http://127.0.0.1:8000/ will open automatically after finishing the initialization process
+## Key Capabilities
 
-## Resources
-`ChromeDriver - WebDriver for Chrome, Docker SDK`
+- **🛡️ Isolated Disposable Sandboxes**: Every analysis runs inside an isolated, disposable container running Debian, Xvfb, and Chromium 131 with anti-bot fingerprint masking, permission prompt suppression, and viewport emulation.
+- **🖥️ Multi-Session 30 FPS Interactive VNC**: Direct, real-time control of the sandboxed browser via Openbox, x11vnc, and noVNC (1440×900 at 30 FPS). Click through multi-stage phishing funnels, bypass CAPTCHAs, or trigger dynamic malware scripts. Supports **up to 5 concurrent live sessions** with dedicated port isolation.
+- **🎥 MP4 Video Session Recording**: Optional lightweight FFmpeg recording of the interactive X11 display. Captures the entire user navigation session into standard H.264 MP4 format, viewable directly within the report via an embedded video player or downloadable for forensic auditing.
+- **📸 Flexible Screenshot Controls**: Independent options for standard viewport screenshots and full-page scrolling screenshots. Completely disabled when deselected.
+- **🧅 Dedicated Tor Gateway & Instant IP Rotation**: Traffic can be routed through an isolated Tor container with remote DNS resolution (SOCKS5h) and active bootstrap synchronization. Executes `SIGNAL NEWNYM` via the Tor ControlPort before every run to guarantee a fresh exit node.
+- **🤖 Multimodal AI Vision Heuristics**: Extracts visual features, detects credential harvesting fields, analyzes DOM brand impersonation heuristics, and produces an AI-ready summary optimized for local LLMs (Gemma, Llama, Ollama).
+- **🍪 Intelligent Cookie Consent Suppression**: Automatically identifies and dismisses intrusive GDPR/cookie consent dialogs before screenshots and threat heuristics are calculated.
+- **💾 Long-Term Persistence & 60-Day Auto-Pruning**: User accounts persist indefinitely in MongoDB Docker named volumes. Analysis records, GridFS documents, logs, and artifacts are automatically purged after 60 days.
+- **⚡ Programmatic REST API**: Fully authenticated endpoints (`/api/v1/analyze`, `/api/v1/tasks/<id>`, `/api/v1/tasks/<id>/summary`, `/api/v1/tasks/<id>/screenshot`, `/api/v1/tasks/<id>/video`) for turnkey integration with SOAR platforms (Cortex XSOAR, Splunk SOAR, Shuffle).
 
-## Other Licenses
-By using this framework, you are accepting the license terms of all the following packages: `chromedriver, dnspython, docker, docker-compose, firefox-esr, flask, flask_admin, flask_bcrypt, flask_login, Flask-Markdown, flask_mongoengine, geckodriver, gevent, gunicorn, iptables, iptables-persistent, jinja2, jq, libleptonica-dev, libtesseract-dev, matplotlib, netifaces, net-tools, networkx, phantomjs, pymongo, pysocks, pytesseract, python-dateutil, python-magic, pyvirtualdisplay, requests[socks], scapy, selenium, supervisor, tcpdump, termcolor, tesseract, tldextract, unzip, urllib3, validator_collection, werkzeug, wget, xvfb, useragentstring`
+---
 
-## Disclaimer\Notes
-- Do not deploy without proper configuration
-- Setup some security group rules and remove default credentials
+## Required Network Ports
 
-## Other Projects
-[![](https://github.com/qeeqbox/.github/blob/main/data/social-analyzer.png)](https://github.com/qeeqbox/social-analyzer) [![](https://github.com/qeeqbox/.github/blob/main/data/analyzer.png)](https://github.com/qeeqbox/analyzer) [![](https://github.com/qeeqbox/.github/blob/main/data/chameleon.png)](https://github.com/qeeqbox/chameleon) [![](https://github.com/qeeqbox/.github/blob/main/data/honeypots.png)](https://github.com/qeeqbox/honeypots) [![](https://github.com/qeeqbox/.github/blob/main/data/mitre-visualizer.png)](https://github.com/qeeqbox/mitre-visualizer) [![](https://github.com/qeeqbox/.github/blob/main/data/woodpecker.png)](https://github.com/qeeqbox/woodpecker) [![](https://github.com/qeeqbox/.github/blob/main/data/docker-images.png)](https://github.com/qeeqbox/docker-images) [![](https://github.com/qeeqbox/.github/blob/main/data/seahorse.png)](https://github.com/qeeqbox/seahorse) [![](https://github.com/qeeqbox/.github/blob/main/data/rhino.png)](https://github.com/qeeqbox/rhino) [![](https://github.com/qeeqbox/.github/blob/main/data/raven.png)](https://github.com/qeeqbox/raven)
+The following table summarizes all network ports utilized across the UrlProbe infrastructure. Ensure these ports are open on the host or permitted within your firewall rules:
+
+| Port / Protocol | Direction / Scope | Service / Container | Description |
+| :--- | :--- | :--- | :--- |
+| **`8000/tcp`** | **Host Inbound** | `website` (Gunicorn / Flask) | **Web Interface & REST API**. Serves the dashboard, report viewer, authentication, and REST API endpoints. |
+| **`6080 - 6100/tcp`** | **Host Inbound** | `box` containers (Websockify / noVNC) | **Interactive VNC Port Pool**. Dynamically allocated per interactive session. Allows up to 20 concurrent VNC sessions (up to 5 parallel Celery workers) directly accessible via browser. |
+| **`6379/tcp`** | **Host / Docker Bridge** | `redis` | **Task Broker & State Lock**. Celery message queue, asynchronous task results, and atomic VNC port allocation tracking. |
+| **`27017/tcp`** | **Host / Docker Bridge** | `mongodb` | **Primary Data Store**. Stores user accounts, task lifecycle logs (`taskdblogs`), and GridFS chunks for HTML/JSON reports and artifacts. |
+| **`9050/tcp`** | **Docker Internal** (`frontend_box`) | `proxy` (Tor Daemon) | **Tor SOCKS5 / SOCKS5h Proxy**. Provides isolated anonymized routing with remote DNS resolution for sandboxed browsers. |
+| **`9051/tcp`** | **Docker Internal** (`frontend_box`) | `proxy` (Tor ControlPort) | **Tor Control Interface**. Used by the sandbox orchestrator to verify 100% bootstrap status and trigger IP rotation (`SIGNAL NEWNYM`). |
+| **`5900/tcp`** | **Container Internal** (Disposable `box`) | `x11vnc` | **RFB Protocol Server**. Internal VNC server capturing the Xvfb `:99` virtual display and feeding `websockify`. |
+| **`Unix Domain Socket`** | **Shared Volume** (`/output/<task>/control.sock`) | `box` & `website` | **IPC Control Socket**. Enables real-time commands (clicks, scrolls, state capture, graceful shutdown) between the web app and running sandbox. |
+
+---
+
+## System Architecture
+
+UrlProbe consists of five decoupled services connected through private internal Docker networks and persistent shared storage:
+
+```
+                                  ┌───────────────────────────────┐
+                                  │     SOC Analyst / Browser     │
+                                  │      SOAR / SIEM Workflows    │
+                                  └──────────────┬────────────────┘
+                                                 │ HTTP (8000) / REST API
+                                                 ▼
+                                  ┌───────────────────────────────┐
+                                  │       UrlProbe Website        │
+                                  │   (Flask / Gunicorn / Nginx)  │
+                                  └───────┬───────────────┬───────┘
+                                          │               │
+                     Task Dispatch (6379) │               │ Mongo Auth & Queries (27017)
+                                          ▼               ▼
+                             ┌─────────────────┐   ┌──────────────────────────────┐
+                             │  Redis Broker   │   │        MongoDB Store         │
+                             │  & Port Lock    │   │  (Users, Reports, GridFS)    │
+                             └────────┬────────┘   └──────────────────────────────┘
+                                      │
+                         Consume Task │ (Concurrency: 5)
+                                      ▼
+                        ┌──────────────────────────────┐
+                        │      Workers API Node        │
+                        │    (Celery Orchestrator)     │
+                        └──────────────┬───────────────┘
+                                       │ Docker Socket (/var/run/docker.sock)
+                                       │ Launches ephemeral box containers
+                                       ▼
+            ┌─────────────────────────────────────────────────────────────┐
+            │        Disposable Sandboxes (Up to 5 Concurrent)            │
+            │  ┌───────────────────────────────────────────────────────┐  │
+            │  │ Sandbox Container: `url-sandbox_box_<task_id>`        │  │
+            │  │  - Xvfb Virtual Framebuffer (1440x900)                │  │
+            │  │  - Openbox Window Manager                             │  │
+            │  │  - Chromium 131 Stealth Webdriver                     │  │
+            │  │  - x11vnc (5900) -> Websockify (Host Port: 6080-6100) │  │
+            │  │  - FFmpeg (X11 grab -> session.mp4)                   │  │
+            │  │  - Scapy Network Sniffer                              │  │
+            │  │  - IPC Socket: `control.sock`                         │  │
+            │  └──────────────────────────┬────────────────────────────┘  │
+            └─────────────────────────────┼───────────────────────────────┘
+                                          │
+                                          │ SOCKS5h (9050) & ControlPort (9051)
+                                          ▼
+                             ┌────────────────────────┐
+                             │   Tor Proxy Gateway    │
+                             │  (IP Rotation NEWNYM)  │
+                             └────────────────────────┘
+```
+
+---
+
+## Analysis Execution Lifecycle
+
+The sequence below illustrates the end-to-end processing pipeline when an analysis request is submitted:
+
+```
+Analyst/API        Website            Celery Worker       Docker Engine       Sandbox Container     Tor Gateway
+    │                 │                     │                   │                     │              │
+    │── POST /analyze ─>│                     │                   │                     │              │
+    │   (URL, Options)│── Enqueue Task ────>│                   │                     │              │
+    │<── Task ID ─────│   (Redis)           │                   │                     │              │
+    │                 │                     │── Find Free Port ─│                     │              │
+    │                 │                     │   (6080-6100)     │                     │              │
+    │                 │                     │── Run Container ─>│                     │              │
+    │                 │                     │   (Named Box)     │── Spawn Container ─>│              │
+    │                 │                     │                   │                     │── Rotate IP ─>│
+    │                 │                     │                   │                     │   (NEWNYM)   │<── 250 OK
+    │                 │                     │                   │                     │── Navigate ──>│
+    │                 │                     │                   │                     │   (Chromium)  │
+    │                 │                     │                   │                     │── Dismiss Popups
+    │                 │                     │                   │                     │── Screenshots │
+    │                 │                     │                   │                     │── Network Map │
+    │                 │                     │                   │                     │── Signal Done │
+    │                 │                     │<── Read Done Marker ────────────────────│   (Done Marker)
+    │                 │                     │── Build Report ──>│ (GridFS Store)      │              │
+    │── Poll Status ─>│                     │                   │                     │              │
+    │<── Complete ────│                     │                   │                     │              │
+    │                 │                     │                   │                     │              │
+    │── View Report ─>│── Fetch GridFS ────>│                   │                     │              │
+    │                 │<── Rendered HTML ───│                   │                     │              │
+    │                 │                     │                   │                     │              │
+    │   [If Interactive VNC Session was selected]               │                     │              │
+    │── GET /status ─>│── Check Socket ──────────────────────────────────────────────>│              │
+    │<── Active/Port ─│                                                               │              │
+    │── Connect VNC ─────────────────────────────────────────────────────────────────>│ (Websockify) │
+    │   (ws://host:608x)                                                              │ (Live Click) │
+    │── Finish Session─>│── Send 'close' ─────────────────────────────────────────────>│              │
+    │                 │                                                               │── Stop FFmpeg│
+    │                 │                                                               │── Save State │
+    │                 │                                                               │── Exit Box   │
+    │<── Reload ──────│                                                               └──────────────┘
+```
+
+---
+
+## Interactive VNC Architecture & Concurrency
+
+UrlProbe provides an isolated, multi-tenant interactive architecture designed to allow analysts to interact directly with live pages without cross-session bleed:
+
+```
+  Analyst A (Task A) ──────> noVNC Frame ──────> Host Port 6080 ──────> Box A (Websockify: 6080)
+  Analyst B (Task B) ──────> noVNC Frame ──────> Host Port 6081 ──────> Box B (Websockify: 6080)
+  Analyst C (Task C) ──────> noVNC Frame ──────> Host Port 6082 ──────> Box C (Websockify: 6080)
+  Analyst D (Task D) ──────> noVNC Frame ──────> Host Port 6083 ──────> Box D (Websockify: 6080)
+  Analyst E (Task E) ──────> noVNC Frame ──────> Host Port 6084 ──────> Box E (Websockify: 6080)
+```
+
+### Key Technical Mechanisms:
+1. **Host-Level Port Reservation (`find_free_port`)**:
+   Rather than testing loopback interfaces inside isolated container namespaces, `worker.py` queries `DOCKER_CLIENT.containers.list()` to detect all ports actively bound on the Docker host, cross-referencing an atomic Redis set (`active_vnc_ports`). This guarantees zero port collisions across concurrent workers.
+2. **Per-Analysis Session Verification**:
+   When opening any report, the frontend issues an asynchronous status check to `/live_interact/<task_id>/status`:
+   - If the session for that **specific task** is still active, the assigned VNC port is dynamically loaded.
+   - If the task is finished (or is an archived analysis), the VNC iframe is **never mounted**, preventing historical reports from mistakenly connecting to newly allocated sessions on reused ports.
+3. **Clean Session Termination (No Reconnect Loops)**:
+   - When the analyst clicks **"✓ Finish Session"**, the noVNC iframe is removed immediately from the DOM to eliminate "reconnecting..." visual loops.
+   - A graceful `close` action is dispatched through `/output/<task>/control.sock`.
+   - The sandbox captures the final visual state, flushes the FFmpeg video trailer, removes the socket, updates `vnc_session.json` to `status: "ended"`, and terminates.
+   - The report updates to show a completed session badge alongside the MP4 playback controls.
+
+---
+
+## Data Persistence & Retention Policy
+
+UrlProbe separates ephemeral execution from durable storage:
+
+```
+                            ┌──────────────────────────────────────────────┐
+                            │               STORAGE ENGINE                 │
+                            └──────────────────────┬───────────────────────┘
+                                                   │
+                  ┌────────────────────────────────┴────────────────────────────────┐
+                  ▼                                                                 ▼
+      ┌─────────────────────────┐                                       ┌─────────────────────────┐
+      │   USER ACCOUNTS ENGINE  │                                       │     ANALYSIS ENGINE     │
+      ├─────────────────────────┤                                       ├─────────────────────────┤
+      │ • Collection: `users`   │                                       │ • Collection: `reports` │
+      │ • Retention: INDEFINITE │                                       │ • Collection: `tasklogs`│
+      │ • Volume:               │                                       │ • Storage: GridFS chunks│
+      │   `url-sandbox_mongodb` │                                       │ • Files: MP4, logs, img │
+      │                         │                                       │ • Retention: 60 DAYS    │
+      └─────────────────────────┘                                       └────────────┬────────────┘
+                                                                                     │
+                                                      Scheduled Cleanups (Daily / Worker Startup)
+                                                                                     │
+                                                                                     ▼
+                                                                        [Purged after 60 days]
+```
+
+- **User Accounts (`users`)**: Persist **indefinitely** inside the named Docker volume `url-sandbox_mongodb_data` mapped to `/data/db`. Stopping, restarting, or upgrading containers preserves all analyst logins.
+- **Analysis Data & Artifacts**: Retained for **60 days**. The built-in cleanup subsystem (`shared/retention.py`) automatically prunes tasks older than 60 days on worker and web startup:
+  - Deletes GridFS file binaries (HTML reports, raw logs, JSON blobs).
+  - Removes metadata records from `reports`, `taskfileslogs`, and `taskdblogs`.
+  - Removes physical on-disk directories (`/output/<task_id>`), including `session.mp4` video recordings and PCAP captures.
+
+---
+
+## REST API Documentation
+
+All API routes require authentication using the API key configured in `shared/settings.py` (or via environment variable `URL_SANDBOX_API_KEY`). Provide the key in the request header via `X-API-Key` or `Authorization: Bearer <token>`.
+
+### 1. Submit URL for Analysis
+```bash
+POST /api/v1/analyze
+```
+**Request Body (JSON):**
+```json
+{
+  "url": "https://malicious-portal.example/login",
+  "use_proxy": true,
+  "interactive": true,
+  "record_vnc": true,
+  "take_screenshot": true,
+  "take_full_screenshot": false,
+  "block_cookies": true,
+  "sniffer_on": false,
+  "url_timeout": 10,
+  "analyzer_timeout": 60,
+  "interactive_timeout": 300,
+  "useragent": "Chrome"
+}
+```
+**Response (200 OK):**
+```json
+{
+  "status": "queued",
+  "task_id": "4b68ff03-3e11-46ab-a021-998847b744d0",
+  "target_url": "https://malicious-portal.example/login",
+  "use_tor": true,
+  "interactive": true,
+  "record_vnc": true
+}
+```
+
+### 2. Retrieve AI Vision & Threat Assessment
+```bash
+GET /api/v1/tasks/<task_id>/summary
+```
+**Response (200 OK):**
+```json
+{
+  "task_id": "4b68ff03-3e11-46ab-a021-998847b744d0",
+  "status": "COMPLETED",
+  "target_url": "https://malicious-portal.example/login",
+  "final_url": "https://login-security-update.com/verify",
+  "http_status": 200,
+  "tor_routed": true,
+  "exit_ip": "185.220.101.4",
+  "ai_assessment": {
+    "verdict": "PHISHING",
+    "risk_score": 95,
+    "impersonated_brand": "Microsoft 365",
+    "credential_theft_detected": true,
+    "form_action": "https://exfil-node.pw/post.php"
+  },
+  "screenshot_available": true
+}
+```
+
+### 3. Fetch Captured Screenshot
+```bash
+GET /api/v1/tasks/<task_id>/screenshot
+```
+Returns `image/jpeg` containing the rendered target viewport.
+
+### 4. Stream or Download Recorded Session Video
+```bash
+GET /api/v1/tasks/<task_id>/video
+```
+Returns streamable `video/mp4` of the recorded interactive session (when `record_vnc` was enabled).
+
+### 5. Check Live Interactive VNC Status
+```bash
+GET /live_interact/<task_id>/status
+```
+**Response (200 OK):**
+```json
+{
+  "task": "4b68ff03-3e11-46ab-a021-998847b744d0",
+  "active": true,
+  "status": "active",
+  "vnc_port": 6080,
+  "has_video": true,
+  "video_url": "/api/v1/tasks/4b68ff03-3e11-46ab-a021-998847b744d0/video"
+}
+```
+
+---
+
+## Installation & Deployment
+
+### System Prerequisites
+- **Operating System**: Linux (Ubuntu/Debian, openSUSE, Fedora/RHEL/CentOS).
+- **Docker Engine**: Docker 20.10+ & Docker Compose v2.
+- **Hardware Recommendations**: 4+ CPU cores, 8 GB RAM, 20 GB free disk space (to comfortably run 5 parallel browser sandboxes).
+
+### One-Click Installation
+```bash
+# Clone the repository
+git clone https://github.com/Orbis38/url-sandbox.git
+cd url-sandbox
+
+# Make runner executable and launch automatic configuration
+chmod +x run.sh
+sudo ./run.sh auto_configure
+```
+
+The script will automatically:
+1. Detect and install required package dependencies (`curl`, `jq`, `docker`, `docker-compose`).
+2. Verify Docker daemon operation and socket availability.
+3. Build all service images (`website`, `workers_api`, `box`, `proxy`, `mongodb`).
+4. Initialize the persistent MongoDB and storage volumes.
+5. Launch all background microservices.
+
+Open your browser at **`http://127.0.0.1:8000/`** to access the web dashboard.
+
+---
+
+## Operational Commands
+
+Manage your deployment using `run.sh` or standard Docker Compose commands:
+
+```bash
+# Interactive menu
+sudo ./run.sh
+
+# Run development stack
+sudo docker compose -f docker-compose-dev.yml up -d
+
+# Stop all services (safely preserves database and files)
+sudo ./run.sh stop
+# OR
+sudo docker compose -f docker-compose-dev.yml down
+
+# View real-time container status
+sudo docker compose -f docker-compose-dev.yml ps
+
+# Follow application logs
+sudo docker compose -f docker-compose-dev.yml logs -f workers_api
+```
+
+---
+
+## Security & Production Hardening
+
+1. **Firewall Ingress**: In production, restrict ports `27017` (MongoDB) and `6379` (Redis) to the local Docker network. Do not expose database ports to public interfaces.
+2. **Reverse Proxy & HTTPS**: Deploy an Nginx, Caddy, or Traefik reverse proxy in front of port `8000` with valid TLS certificates (Let's Encrypt).
+3. **Secret Keys**: Update the default `backend_key`, `URL_SANDBOX_API_KEY`, and MongoDB credentials in `shared/settings.py` before analyzing untrusted links in live SOC environments.
+4. **Sandbox Network Isolation**: The disposable `box` container connects exclusively through the `url-sandbox_frontend_box` bridge network, routing web requests strictly via the isolated Tor gateway when `use_proxy` is enabled.
+
+---
+
+## License
+
+This project is licensed under the terms of the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for complete details.

@@ -4,7 +4,7 @@
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
 
 VERSION=$(jq -r '.version' info 2>/dev/null || grep -o '"version": *"[^"]*"' info 2>/dev/null | cut -d'"' -f4 || echo "latest")
-echo -e "\nQeeqBox URL-Sandbox v${VERSION} starter script -> https://github.com/qeeqbox/url-sandbox"
+echo -e "\nUrlProbe Sandbox v${VERSION} starter script -> https://github.com/Orbis38/url-sandbox"
 echo -e "Open-Source URL Sandbox\n"
 
 if [[ $EUID -ne 0 ]]; then
@@ -197,10 +197,10 @@ stop_containers () {
 	if ! docker info &>/dev/null; then
 		return 0
 	fi
-	compose_cmd -f docker-compose-test.yml down -v 2>/dev/null || true
-	compose_cmd -f docker-compose-dev.yml down -v 2>/dev/null || true
+	compose_cmd -f docker-compose-test.yml down 2>/dev/null || true
+	compose_cmd -f docker-compose-dev.yml down 2>/dev/null || true
 	local containers
-	containers=$(docker ps -a -q --filter "name=url-sandbox_" 2>/dev/null)
+	containers=$(docker ps -a -q --filter "name=url-sandbox_box_" 2>/dev/null)
 	if [ -n "$containers" ]; then
 		docker stop $containers 2>/dev/null || true
 		docker rm -f $containers 2>/dev/null || true

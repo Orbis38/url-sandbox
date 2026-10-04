@@ -34,6 +34,9 @@ json_settings = {
         "logs_folder": "/tmp/urlsandbox/logs/",
         "output_folder": "/tmp/urlsandbox/output/",
         "db_folder": "/tmp/urlsandbox/dbs/",
+        "docker_volume_output": "url-sandbox_output",
+        "retention_days": 60,
+        "max_concurrent_vnc": 5,
         "task_logs": {
             "box_output": "/output/",
             "sniffer_logs": "-sniffer.logs",

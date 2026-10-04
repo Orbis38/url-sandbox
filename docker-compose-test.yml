@@ -17,7 +17,7 @@ services:
     volumes:
       - ./shared:/website/shared:z
       - /etc/localtime:/etc/localtime:ro
-      - /tmp/urlsandbox/output:/tmp/urlsandbox/output:z
+      - url-sandbox_output:/tmp/urlsandbox/output:z
     healthcheck:
       disable: true 
 
@@ -25,7 +25,7 @@ services:
     build:
       context: .
       dockerfile: ./backend-Dockerfile
-    command: celery -A worker worker --concurrency=1 -l WARNING -Q analyze_url_queue
+    command: celery -A worker worker --concurrency=5 -l WARNING -Q analyze_url_queue
     restart: always
     privileged: true
     environment:
@@ -37,8 +37,8 @@ services:
       - backend
       - frontend
     volumes:
-      - /tmp/urlsandbox/logs:/tmp/urlsandbox/logs/
-      - /tmp/urlsandbox/output:/tmp/urlsandbox/output/:z
+      - url-sandbox_logs:/tmp/urlsandbox/logs/
+      - url-sandbox_output:/tmp/urlsandbox/output/:z
       - /etc/localtime:/etc/localtime:ro
       - ./shared:/backend/shared
       - /usr/bin/docker:/usr/bin/docker
@@ -87,6 +87,7 @@ services:
       - frontend
     volumes:
       - /etc/localtime:/etc/localtime:ro
+      - url-sandbox_mongodb_data:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: changeme_9620eh26sfvka017fx
       MONGO_INITDB_ROOT_PASSWORD: changeme_0cx821ncf7qg17ahx3
@@ -103,3 +104,10 @@ networks:
 
 volumes:
   tor_data:
+    name: url-sandbox_tor_data
+  url-sandbox_mongodb_data:
+    name: url-sandbox_mongodb_data
+  url-sandbox_output:
+    name: url-sandbox_output
+  url-sandbox_logs:
+    name: url-sandbox_logs

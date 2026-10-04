@@ -13,6 +13,7 @@ from tldextract import extract as textract
 from qbreport import make_report
 from shared.settings import json_settings
 from shared.logger import log_string, setup_task_logger, ignore_exception, cancel_task_logger
+from shared.retention import cleanup_expired_analyses
 
 DOCKER_CLIENT = from_env()
 CELERY = Celery(json_settings[environ["project_env"]]["celery_settings"]["name"],
@@ -26,17 +27,60 @@ CELERY.conf.update(
     CELERY_TIMEZONE="America/Los_Angeles"
 )
 
+# Run retention cleanup on startup to ensure 60-day policy (users kept indefinitely)
+try:
+    cleanup_expired_analyses(days=json_settings[environ["project_env"]].get("retention_days", 60), project_env=environ["project_env"])
+except Exception as _ce:
+    print(f"Worker startup retention check: {_ce}", flush=True)
+
 
 def find_free_port(start=6080, end=6100):
-    import socket
-    for port in range(start, end):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    allocated = set()
+    try:
+        for c in DOCKER_CLIENT.containers.list():
+            ports_dict = c.ports or {}
+            for port_list in ports_dict.values():
+                if port_list:
+                    for binding in port_list:
+                        hp = binding.get('HostPort')
+                        if hp:
+                            allocated.add(int(hp))
+    except Exception:
+        pass
+
+    try:
+        import redis
+        rd = redis.from_url(json_settings[environ["project_env"]]["redis_settings"])
+        active_in_redis = rd.smembers("active_vnc_ports") or set()
+        for p in active_in_redis:
             try:
-                s.bind(('0.0.0.0', port))
-                return port
-            except OSError:
-                continue
+                allocated.add(int(p))
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    for port in range(start, end):
+        if port not in allocated:
+            try:
+                import redis
+                rd = redis.from_url(json_settings[environ["project_env"]]["redis_settings"])
+                rd.sadd("active_vnc_ports", port)
+            except Exception:
+                pass
+            return port
     return start
+
+
+def release_vnc_port(port):
+    if not port:
+        return
+    try:
+        import redis
+        rd = redis.from_url(json_settings[environ["project_env"]]["redis_settings"])
+        rd.srem("active_vnc_ports", port)
+    except Exception:
+        pass
 
 
 @CELERY.task(bind=True, name=json_settings[environ["project_env"]]["worker"]["name"], queue=json_settings[environ["project_env"]]["worker"]["queue"], soft_time_limit=json_settings[environ["project_env"]]["worker"]["task_time_limit"], time_limit=json_settings[environ["project_env"]]["worker"]["task_time_limit"] + 10, max_retries=0, default_retry_delay=5)
@@ -63,7 +107,24 @@ def analyze_url(self, parsed):
             log_string("Routing via Tor proxy gateway", task=parsed['task'])
         else:
             log_string("Direct network connection (no proxy)", task=parsed['task'])
-        temp_container = DOCKER_CLIENT.containers.run("url-sandbox-box", command=[hexlify(jdumps(parsed).encode()).decode()], volumes={json_settings[environ["project_env"]]["output_folder"]: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}}, detach=True, network="url-sandbox_frontend_box", ports=ports)
+
+        output_vol = json_settings[environ["project_env"]].get("docker_volume_output") or json_settings[environ["project_env"]]["output_folder"]
+        container_name = f"url-sandbox_box_{parsed['task']}"
+        try:
+            existing_c = DOCKER_CLIENT.containers.get(container_name)
+            existing_c.remove(force=True)
+        except Exception:
+            pass
+
+        temp_container = DOCKER_CLIENT.containers.run(
+            "url-sandbox-box",
+            name=container_name,
+            command=[hexlify(jdumps(parsed).encode()).decode()],
+            volumes={output_vol: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}},
+            detach=True,
+            network="url-sandbox_frontend_box",
+            ports=ports
+        )
         temp_logs = ""
         if parsed.get('interactive'):
             log_string("Interactive mode requested. Waiting for analysis to complete...", task=parsed['task'])
@@ -125,6 +186,7 @@ def analyze_url(self, parsed):
             except Exception:
                 pass
             temp_container = None
+            release_vnc_port(parsed.get('vnc_port'))
     try:
         if temp_container is not None and not parsed.get('interactive'):
             temp_container.stop()

@@ -6,8 +6,9 @@
 from time import sleep
 from json import loads, dumps
 from warnings import filterwarnings
-from subprocess import Popen, DEVNULL
+from subprocess import Popen, DEVNULL, PIPE
 import os
+import signal
 from urllib.parse import urlparse
 from pyvirtualdisplay import Display
 from selenium import webdriver
@@ -512,6 +513,9 @@ def chrome_driver(parsed, analyzer_db):
     '''
     DISPLAY.start()
     vnc_processes = []
+    ffmpeg_proc = None
+    video_file = os.path.join(parsed['locations']['box_output'], parsed['task'], "session.mp4")
+
     if parsed.get('interactive'):
         disp = getattr(DISPLAY, 'new_display_var', None) or os.environ.get("DISPLAY", ":0")
         os.environ["DISPLAY"] = disp
@@ -547,6 +551,42 @@ def chrome_driver(parsed, analyzer_db):
             vnc_processes.append(ws_proc)
         except Exception as e:
             print(f"[SandBox] Warning starting websockify: {e}", flush=True)
+
+        if parsed.get('record_vnc'):
+            try:
+                task_dir = os.path.join(parsed['locations']['box_output'], parsed['task'])
+                os.makedirs(task_dir, exist_ok=True)
+                print(f"[SandBox] Starting ffmpeg recording of {disp} to {video_file}", flush=True)
+                ffmpeg_proc = Popen([
+                    "ffmpeg", "-y",
+                    "-video_size", "1440x900",
+                    "-framerate", "15",
+                    "-f", "x11grab",
+                    "-i", f"{disp}.0",
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "28",
+                    "-pix_fmt", "yuv420p",
+                    video_file
+                ], stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+            except Exception as e:
+                print(f"[SandBox] Warning starting ffmpeg: {e}", flush=True)
+
+        # Write initial session metadata for the web interface
+        try:
+            task_dir = os.path.join(parsed['locations']['box_output'], parsed['task'])
+            os.makedirs(task_dir, exist_ok=True)
+            session_meta_path = os.path.join(task_dir, "vnc_session.json")
+            with open(session_meta_path, "w") as smf:
+                smf.write(dumps({
+                    "task": parsed['task'],
+                    "vnc_port": parsed.get('vnc_port'),
+                    "status": "active",
+                    "record_vnc": bool(parsed.get('record_vnc')),
+                    "has_video": False
+                }))
+        except Exception as e:
+            print(f"[SandBox] Warning writing vnc_session.json: {e}", flush=True)
 
     analyzer_table = analyzer_db.table('analyzer_table')
     extracted_table = analyzer_db.table('extracted_table')
@@ -629,9 +669,12 @@ def chrome_driver(parsed, analyzer_db):
     get_all_links(chromebrowser.page_source, extracted_table)
     get_all_scripts(chromebrowser.page_source, extracted_table)
     extract_phishing_heuristics(chromebrowser, parsed, extracted_table)
-    if parsed['take_full_screenshot']:
+    should_take_normal = parsed.get('take_screenshot', False) or (parsed.get('take_screenshot') is None and parsed.get('take_full_screenshot'))
+    should_take_full = parsed.get('take_full_screenshot', False)
+    if should_take_full:
         take_full_screen_shot(chromebrowser, screenshot_table)
-    take_normal_screen_shot(chromebrowser, screenshot_table)
+    if should_take_normal:
+        take_normal_screen_shot(chromebrowser, screenshot_table)
     parse_ouput(performance_logs, analyzer_table)
     make_network(analyzer_table, network_table)
     if parsed.get('interactive') and interactive_server is not None:
@@ -643,6 +686,38 @@ def chrome_driver(parsed, analyzer_db):
         signal_analysis_done(parsed)
         serve_interactive(interactive_server, chromebrowser, parsed, analyzer_db)
     chromebrowser.quit()
+
+    if ffmpeg_proc is not None:
+        try:
+            print("[SandBox] Finalizing video recording...", flush=True)
+            try:
+                ffmpeg_proc.communicate(input=b'q', timeout=4)
+            except Exception:
+                ffmpeg_proc.send_signal(signal.SIGINT)
+                ffmpeg_proc.wait(timeout=3)
+        except Exception as e:
+            print(f"[SandBox] Warning stopping ffmpeg: {e}", flush=True)
+            try:
+                ffmpeg_proc.kill()
+            except Exception:
+                pass
+
+    if parsed.get('interactive'):
+        try:
+            task_dir = os.path.join(parsed['locations']['box_output'], parsed['task'])
+            session_meta_path = os.path.join(task_dir, "vnc_session.json")
+            has_vid = os.path.exists(video_file) and os.path.getsize(video_file) > 1000
+            with open(session_meta_path, "w") as smf:
+                smf.write(dumps({
+                    "task": parsed['task'],
+                    "vnc_port": parsed.get('vnc_port'),
+                    "status": "ended",
+                    "record_vnc": bool(parsed.get('record_vnc')),
+                    "has_video": has_vid
+                }))
+        except Exception as e:
+            print(f"[SandBox] Warning updating vnc_session.json: {e}", flush=True)
+
     for p in vnc_processes:
         try:
             p.terminate()

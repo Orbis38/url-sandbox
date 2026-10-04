@@ -4,9 +4,11 @@
 {% set switch_desc = {
    'use_proxy': 'Route traffic through Tor network with fresh IP rotation per run',
    'no_redirect': 'Capture the first response only, no follow-through',
-   'take_full_screenshot': 'Capture a full-page screenshot of the target',
+   'take_screenshot': 'Capture standard viewport screenshot of the target',
+   'take_full_screenshot': 'Capture full-page scrolling screenshot of the target',
    'sniffer_on': 'Capture raw packet-level network traffic (Scapy) on the network interface',
    'interactive': 'Full real-time interactive browser session (30 FPS, scroll, click, type)',
+   'record_vnc': 'Record MP4 video of the interactive VNC session for replay in the report',
    'block_cookies': 'Auto-dismiss cookie consent banners so they stay out of the screenshot'
 } %}
 <div class="up-submit-grid">
