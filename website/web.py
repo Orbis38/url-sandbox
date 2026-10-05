@@ -745,6 +745,15 @@ def live_interact(task_id):
                     sdata["has_video"] = has_vid
                     with open(session_path, 'w') as sf:
                         json.dump(sdata, sf)
+
+                    v_port = sdata.get("vnc_port")
+                    if v_port:
+                        try:
+                            import redis
+                            rd = redis.from_url(json_settings[environ["project_env"]]["redis_settings"])
+                            rd.srem("active_vnc_ports", v_port)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
@@ -756,6 +765,7 @@ def live_interact(task_id):
 
 
 @APP.route('/live_interact/<task_id>/status', methods=['GET'])
+@CSRF.exempt
 def live_interact_status(task_id):
     if not current_user.is_authenticated and not check_api_auth():
         return jsonify(error="Unauthorized"), 401
@@ -765,41 +775,35 @@ def live_interact_status(task_id):
     session_path = path.join(output_dir, "vnc_session.json")
     socket_path = path.join(output_dir, "control.sock")
     video_path = path.join(output_dir, "session.mp4")
-    has_video = path.exists(video_path) and path.getsize(video_path) > 1000
 
-    data = {
-        "task": task_id,
-        "active": False,
-        "status": "ended",
-        "vnc_port": None,
-        "has_video": has_video,
-        "video_url": f"/api/v1/tasks/{task_id}/video" if has_video else None
-    }
-
+    saved = {}
     if path.exists(session_path):
         try:
             with open(session_path, 'r') as f:
                 saved = json.load(f)
-            data.update(saved)
         except Exception:
             pass
 
-    # Check if control socket actually exists and is active
-    if path.exists(socket_path):
-        data["active"] = True
-        data["status"] = "active"
-    else:
-        data["active"] = False
-        data["status"] = "ended"
+    socket_alive = path.exists(socket_path)
+    is_ended = (saved.get("status") == "ended")
+    is_active = socket_alive and not is_ended
+    has_video = (not is_active) and path.exists(video_path) and path.getsize(video_path) > 1000
 
-    data["has_video"] = has_video or data.get("has_video", False)
-    if data["has_video"] and not data.get("video_url"):
-        data["video_url"] = f"/api/v1/tasks/{task_id}/video"
+    data = {
+        "task": task_id,
+        "active": is_active,
+        "status": "active" if is_active else "ended",
+        "vnc_port": saved.get("vnc_port"),
+        "record_vnc": saved.get("record_vnc", False),
+        "has_video": has_video,
+        "video_url": f"/api/v1/tasks/{task_id}/video" if has_video else None
+    }
 
     return jsonify(data)
 
 
 @APP.route('/api/v1/tasks/<task_id>/video', methods=['GET'])
+@CSRF.exempt
 def get_task_video(task_id):
     if not current_user.is_authenticated and not check_api_auth():
         return jsonify(error="Unauthorized"), 401

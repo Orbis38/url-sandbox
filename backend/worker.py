@@ -52,9 +52,13 @@ def find_free_port(start=6080, end=6100):
         import redis
         rd = redis.from_url(json_settings[environ["project_env"]]["redis_settings"])
         active_in_redis = rd.smembers("active_vnc_ports") or set()
-        for p in active_in_redis:
+        for p in list(active_in_redis):
             try:
-                allocated.add(int(p))
+                port_num = int(p)
+                if port_num not in allocated:
+                    rd.srem("active_vnc_ports", p)
+                else:
+                    allocated.add(port_num)
             except Exception:
                 pass
     except Exception:
@@ -160,10 +164,16 @@ def analyze_url(self, parsed):
                 log_string("Interactive analysis marker not seen in time; keeping session alive", task=parsed['task'])
         else:
             for item in range(1, parsed['analyzer_timeout']):
-                temp_logs = temp_container.logs()
-                if len(temp_logs) > 1:
-                    if temp_logs.endswith(b"Done!!\n"):
+                try:
+                    temp_container.reload()
+                    if temp_container.status == 'exited':
+                        temp_logs = temp_container.logs()
                         break
+                except Exception:
+                    pass
+                temp_logs = temp_container.logs()
+                if len(temp_logs) > 1 and b"Done!!" in temp_logs:
+                    break
                 sleep(1)
             try:
                 temp_container.stop()

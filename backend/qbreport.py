@@ -444,11 +444,16 @@ def make_report(parsed):
 
                 function renderSessionEnded(info) {{
                     if (pollInterval) {{ clearInterval(pollInterval); pollInterval = null; }}
-                    $('#live-indicator-dot').css({{'background': '#64748b', 'box-shadow': 'none', 'animation': 'none'}});
-                    $('#live-status-title').text('Sessione VNC Conclusa');
-                    $('#live-session-info').html('<span style="color:#64748b;">Analisi: ' + TASK.substring(0, 8) + '</span>');
-                    $('#interactive-actions').hide();
-                    $('#novnc-frame').remove();
+                    var dot = document.getElementById('live-indicator-dot');
+                    if (dot) {{ dot.style.background = '#64748b'; dot.style.boxShadow = 'none'; dot.style.animation = 'none'; }}
+                    var title = document.getElementById('live-status-title');
+                    if (title) {{ title.textContent = 'Sessione VNC Conclusa'; }}
+                    var sInfo = document.getElementById('live-session-info');
+                    if (sInfo) {{ sInfo.innerHTML = '<span style="color:#64748b;">Analisi: ' + TASK.substring(0, 8) + '</span>'; }}
+                    var actions = document.getElementById('interactive-actions');
+                    if (actions) {{ actions.style.display = 'none'; }}
+                    var frame = document.getElementById('novnc-frame');
+                    if (frame) {{ frame.remove(); }}
 
                     var videoBlock = '';
                     if (info && (info.has_video || info.video_url)) {{
@@ -465,46 +470,70 @@ def make_report(parsed):
                         '</div>';
                     }}
 
-                    $('#vnc-container').html(
-                        '<div class="up-session-ended-box">' +
-                            '<div class="up-session-ended-icon">✓</div>' +
-                            '<h4 style="color:#f1f5f9;margin-bottom:8px;font-size:18px;font-weight:600;">Sessione VNC Conclusa</h4>' +
-                            '<p style="color:#94a3b8;font-size:13px;max-width:540px;line-height:1.5;margin-bottom:0;">' +
-                                'La sessione interattiva VNC per l\'analisi <code style="color:#818cf8;background:#1e293b;padding:2px 6px;border-radius:4px;">' + TASK + '</code> è terminata. Il browser è stato chiuso e lo stato finale è salvato.' +
-                            '</p>' +
-                            videoBlock +
-                        '</div>'
-                    );
+                    var container = document.getElementById('vnc-container');
+                    if (container) {{
+                        container.innerHTML =
+                            '<div class="up-session-ended-box">' +
+                                '<div class="up-session-ended-icon">✓</div>' +
+                                '<h4 style="color:#f1f5f9;margin-bottom:8px;font-size:18px;font-weight:600;">Sessione VNC Conclusa</h4>' +
+                                '<p style="color:#94a3b8;font-size:13px;max-width:540px;line-height:1.5;margin-bottom:0;">' +
+                                    'La sessione interattiva VNC per questa analisi <code style="color:#818cf8;background:#1e293b;padding:2px 6px;border-radius:4px;">' + TASK + '</code> è terminata. Il browser è stato chiuso e lo stato finale è salvato.' +
+                                '</p>' +
+                                videoBlock +
+                            '</div>';
+                    }}
                 }}
 
-                function verifySession(isFirstLoad) {{
-                    var $ = window.jQuery;
-                    $.ajax({{
-                        url: '/live_interact/' + TASK + '/status',
-                        type: 'GET',
-                        dataType: 'json',
-                        timeout: 5000,
-                        success: function(resp) {{
-                            if (resp && resp.active && resp.status === 'active') {{
-                                var port = resp.vnc_port || FALLBACK_PORT;
-                                if (isFirstLoad) {{
-                                    var vncUrl = proto + '//' + host + ':' + port + '/vnc.html?autoconnect=true&resize=scale&reconnect=false';
-                                    $('#novnc-frame').attr('src', vncUrl);
-                                    $('#btn-newtab').attr('href', vncUrl);
-                                    $('#live-session-info').html('<span style="color:#818cf8;">Porta ' + port + '</span> &bull; Analisi: ' + TASK.substring(0, 8));
-                                }}
-                            }} else {{
-                                renderSessionEnded(resp);
-                            }}
-                        }},
-                        error: function() {{
-                            renderSessionEnded({{ has_video: false }});
+                function checkStatus() {{
+                    fetch('/live_interact/' + TASK + '/status', {{
+                        headers: {{ 'Accept': 'application/json' }},
+                        credentials: 'same-origin'
+                    }})
+                    .then(function(r) {{ return r.json(); }})
+                    .then(function(resp) {{
+                        if (resp && (resp.status === 'ended' || resp.active === false)) {{
+                            renderSessionEnded(resp);
                         }}
+                    }})
+                    .catch(function() {{
+                        // Ignore transient network errors
+                    }});
+                }}
+
+                function initSession() {{
+                    var defaultUrl = proto + '//' + host + ':' + FALLBACK_PORT + '/vnc.html?autoconnect=true&resize=scale&reconnect=false';
+                    var frame = document.getElementById('novnc-frame');
+                    var newtab = document.getElementById('btn-newtab');
+                    var sInfo = document.getElementById('live-session-info');
+
+                    fetch('/live_interact/' + TASK + '/status', {{
+                        headers: {{ 'Accept': 'application/json' }},
+                        credentials: 'same-origin'
+                    }})
+                    .then(function(r) {{ return r.json(); }})
+                    .then(function(resp) {{
+                        if (resp && (resp.status === 'ended' || resp.active === false)) {{
+                            renderSessionEnded(resp);
+                            return;
+                        }}
+                        var port = (resp && resp.vnc_port) ? resp.vnc_port : FALLBACK_PORT;
+                        var vncUrl = proto + '//' + host + ':' + port + '/vnc.html?autoconnect=true&resize=scale&reconnect=false';
+                        if (frame) {{ frame.src = vncUrl; }}
+                        if (newtab) {{ newtab.href = vncUrl; }}
+                        if (sInfo) {{ sInfo.innerHTML = '<span style="color:#818cf8;font-weight:600;">Porta ' + port + '</span> &bull; Analisi: ' + TASK.substring(0, 8); }}
+                        pollInterval = setInterval(checkStatus, 4000);
+                    }})
+                    .catch(function() {{
+                        if (frame) {{ frame.src = defaultUrl; }}
+                        if (newtab) {{ newtab.href = defaultUrl; }}
+                        if (sInfo) {{ sInfo.innerHTML = '<span style="color:#818cf8;font-weight:600;">Porta ' + FALLBACK_PORT + '</span> &bull; Analisi: ' + TASK.substring(0, 8); }}
+                        pollInterval = setInterval(checkStatus, 4000);
                     }});
                 }}
 
                 window.toggleVncFullscreen = function() {{
                     var el = document.getElementById('vnc-container');
+                    if (!el) return;
                     if (!document.fullscreenElement) {{
                         if (el.requestFullscreen) {{ el.requestFullscreen(); }}
                         else if (el.webkitRequestFullscreen) {{ el.webkitRequestFullscreen(); }}
@@ -514,52 +543,58 @@ def make_report(parsed):
                 }};
 
                 window.finishLiveSession = function() {{
-                    var $ = window.jQuery;
                     if (!confirm('Confermi di voler terminare la sessione interattiva VNC e salvare lo stato finale?')) return;
-                    var btn = $('#btn-finish');
-                    btn.prop('disabled', true).text('Chiusura in corso…');
-                    $('#live-status-title').text('Chiusura sessione…');
-                    $('#live-indicator-dot').css({{'background': '#f59e0b', 'box-shadow': '0 0 8px #f59e0b'}});
+                    var btn = document.getElementById('btn-finish');
+                    if (btn) {{
+                        btn.disabled = true;
+                        btn.textContent = 'Chiusura in corso…';
+                    }}
+                    var title = document.getElementById('live-status-title');
+                    if (title) {{ title.textContent = 'Chiusura sessione…'; }}
+                    var dot = document.getElementById('live-indicator-dot');
+                    if (dot) {{
+                        dot.style.background = '#f59e0b';
+                        dot.style.boxShadow = '0 0 8px #f59e0b';
+                    }}
 
                     if (pollInterval) {{ clearInterval(pollInterval); pollInterval = null; }}
 
-                    // Remove iframe immediately so no reconnecting messages are ever shown
-                    $('#novnc-frame').remove();
-                    $('#vnc-container').html(
-                        '<div class="up-session-ended-box">' +
-                            '<div class="up-session-ended-icon" style="border-color:#f59e0b;color:#f59e0b;">⏳</div>' +
-                            '<h4 style="color:#f1f5f9;margin-bottom:8px;font-size:18px;">Salvataggio stato finale…</h4>' +
-                            '<p style="color:#94a3b8;font-size:13px;">Finalizzazione della sessione VNC e generazione del report.</p>' +
-                        '</div>'
-                    );
+                    var frame = document.getElementById('novnc-frame');
+                    if (frame) {{ frame.remove(); }}
 
-                    $.ajax({{
-                        url: '/live_interact/' + TASK,
-                        type: 'POST',
-                        contentType: 'application/json',
-                        data: JSON.stringify({{ action: 'close' }}),
-                        success: function(resp) {{
-                            setTimeout(function() {{
-                                window.location.reload();
-                            }}, 1200);
-                        }},
-                        error: function() {{
-                            setTimeout(function() {{
-                                window.location.reload();
-                            }}, 1200);
-                        }}
+                    var container = document.getElementById('vnc-container');
+                    if (container) {{
+                        container.innerHTML =
+                            '<div class="up-session-ended-box">' +
+                                '<div class="up-session-ended-icon" style="border-color:#f59e0b;color:#f59e0b;">⏳</div>' +
+                                '<h4 style="color:#f1f5f9;margin-bottom:8px;font-size:18px;">Salvataggio stato finale…</h4>' +
+                                '<p style="color:#94a3b8;font-size:13px;">Finalizzazione della sessione VNC e generazione del report.</p>' +
+                            '</div>';
+                    }}
+
+                    fetch('/live_interact/' + TASK, {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        credentials: 'same-origin',
+                        body: JSON.stringify({{ action: 'close' }})
+                    }})
+                    .then(function() {{
+                        setTimeout(function() {{
+                            window.location.reload();
+                        }}, 1200);
+                    }})
+                    .catch(function() {{
+                        setTimeout(function() {{
+                            window.location.reload();
+                        }}, 1200);
                     }});
                 }};
 
-                (function ready() {{
-                    if (typeof window.jQuery === 'undefined') {{ return setTimeout(ready, 50); }}
-                    window.jQuery(function () {{
-                        verifySession(true);
-                        pollInterval = setInterval(function() {{
-                            verifySession(false);
-                        }}, 6000);
-                    }});
-                }})();
+                if (document.readyState === 'loading') {{
+                    document.addEventListener('DOMContentLoaded', initSession);
+                }} else {{
+                    initSession();
+                }}
             }})();
         </script>
         """

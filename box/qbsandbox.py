@@ -567,6 +567,7 @@ def chrome_driver(parsed, analyzer_db):
                     "-preset", "ultrafast",
                     "-crf", "28",
                     "-pix_fmt", "yuv420p",
+                    "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
                     video_file
                 ], stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
             except Exception as e:
