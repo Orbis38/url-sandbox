@@ -4,11 +4,11 @@
 '''
 
 from os import environ, path
-from uuid import uuid4
+from uuid import UUID, uuid4
 from datetime import timedelta, datetime
 from json import dumps
 from bson.objectid import ObjectId
-from flask import Flask, flash, jsonify, redirect, request, session, url_for, send_file
+from flask import Flask, flash, g, jsonify, redirect, request, session, url_for, send_file
 from flask_mongoengine import MongoEngine
 from wtforms.widgets import ListWidget, CheckboxInput
 from wtforms import form, fields, validators, SelectMultipleField
@@ -23,12 +23,13 @@ from pymongo import ASCENDING
 from redis import Redis
 from celery import Celery
 from bs4 import BeautifulSoup
-from validator_collection import validators
+from validator_collection import validators as url_validators
 from werkzeug.exceptions import HTTPException, default_exceptions
 from shared.settings import defaultdb, json_settings, meta_users_settings
 from shared.logger import ignore_exception
 from shared.mongodbconn import CLIENT, get_it_fs
 from shared.retention import cleanup_expired_analyses
+from shared.apikeys import create_api_key, authenticate_api_key, revoke_api_key
 
 SWITCHES = [
     ('use_proxy', 'use Tor'),
@@ -329,7 +330,7 @@ class CustomViewBufferForm(BaseView):
             if temp_form.buffer.data != "":
                 good_url = False
                 try:
-                    validators.url(temp_form.buffer.data)
+                    url_validators.url(temp_form.buffer.data)
                     good_url = True
                 except BaseException:
                     pass
@@ -343,14 +344,13 @@ class CustomViewBufferForm(BaseView):
                     result["buffer"] = temp_form.buffer.data
                     result["proxy"] = 'socks5://proxy:9050' if result.get('use_proxy') else ''
                     result["task"] = task
+                    result["owner_id"] = str(current_user.get_id())
                     result["analyzer_timeout"] = temp_form.analyzertimeout.data
                     result["url_timeout"] = temp_form.urltimeout.data
                     result["interactive_timeout"] = temp_form.interactivetimeout.data
                     result["useragent"] = temp_form.useragents.data
                     result["useragent_mapped"] = SWITCHES_MAPPED[temp_form.useragents.data]
-                    _task = CELERY.send_task(json_settings[environ["project_env"]]["worker"]["name"],
-                                             args=[result],
-                                             queue=json_settings[environ["project_env"]]["worker"]["queue"])
+                    enqueue_owned_task(result)
                     if request.form.get('submitandwait') == 'Analyze & Wait':
                         # stay on the page so the spinner can poll and show the
                         # finished report inline
@@ -418,8 +418,12 @@ def get_queue_tasks(limit=100):
     end is None while a task is queued/running, set once it completes.
     '''
     tasks = []
+    owner_id = request_owner_id()
+    if not owner_id:
+        return tasks
     with ignore_exception(Exception):
-        cursor = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find().sort([("start", -1)]).limit(limit)
+        cursor = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find(
+            {"owner_id": owner_id}).sort([("start", -1)]).limit(limit)
         for item in cursor:
             start = item.get("start")
             end = item.get("end")
@@ -583,12 +587,13 @@ def get_last_logs(json):
     '''
     get last item from logs
     '''
-    items = []
-    if json['id'] == 0:
-        items, startid = find_and_srot(defaultdb["dbname"], defaultdb["alllogscoll"], "time", datetime.now())
-    else:
-        items, startid = find_and_srot(defaultdb["dbname"], defaultdb["alllogscoll"], "_id", ObjectId(json['id']))
-    return {"id": startid, "logs": items}
+    owner_id = request_owner_id()
+    if not owner_id:
+        return {'id': 0, 'logs': ''}
+    docs = list(CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find(
+        {"owner_id": owner_id}).sort([("start", -1)]).limit(100))
+    lines = [line for doc in reversed(docs) for line in (doc.get('logs') or [])]
+    return {"id": len(lines), "logs": "\n".join(lines)}
 
 
 class CustomLogsView(BaseView):
@@ -635,7 +640,10 @@ class CheckTask(BaseView):
         if request.method == 'POST':
             if request.json:
                 json_content = request.get_json(silent=True)
-                item = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one({"task": json_content["task"]})
+                task_id = json_content.get('task') if isinstance(json_content, dict) else None
+                item = owned_task(task_id)
+                if not item:
+                    return jsonify(error="Task not found"), 404
                 if item:
                     if item["end"]:
                         item = get_it_fs(defaultdb["dbname"], {"task": json_content["task"], 'contentType': 'text/html'})
@@ -700,7 +708,7 @@ def update_gridfs_report(task_id, new_screenshot_base64, new_full_screenshot_bas
 @APP.route('/live_interact/<task_id>', methods=['POST'])
 @CSRF.exempt
 def live_interact(task_id):
-    if not current_user.is_authenticated and not check_api_auth():
+    if not check_api_auth():
         return jsonify(error="Unauthorized"), 401
         
     json_content = request.get_json(silent=True) or {}
@@ -767,7 +775,7 @@ def live_interact(task_id):
 @APP.route('/live_interact/<task_id>/status', methods=['GET'])
 @CSRF.exempt
 def live_interact_status(task_id):
-    if not current_user.is_authenticated and not check_api_auth():
+    if not check_api_auth():
         return jsonify(error="Unauthorized"), 401
     
     import json
@@ -794,6 +802,7 @@ def live_interact_status(task_id):
         "active": is_active,
         "status": "active" if is_active else "ended",
         "vnc_port": saved.get("vnc_port"),
+        "vnc_token": saved.get("vnc_token") if is_active else None,
         "record_vnc": saved.get("record_vnc", False),
         "has_video": has_video,
         "video_url": f"/api/v1/tasks/{task_id}/video" if has_video else None
@@ -805,7 +814,7 @@ def live_interact_status(task_id):
 @APP.route('/api/v1/tasks/<task_id>/video', methods=['GET'])
 @CSRF.exempt
 def get_task_video(task_id):
-    if not current_user.is_authenticated and not check_api_auth():
+    if not check_api_auth():
         return jsonify(error="Unauthorized"), 401
     video_path = path.join(json_settings[environ["project_env"]]["output_folder"], task_id, "session.mp4")
     if not path.exists(video_path):
@@ -817,20 +826,105 @@ def get_task_video(task_id):
 
 
 
-def check_api_auth():
-    if current_user.is_authenticated:
-        return True
+def api_key_collection():
+    return CLIENT[defaultdb['dbname']]['api_keys']
+
+
+def request_owner_id():
+    if hasattr(g, 'owner_id'):
+        return g.owner_id
     auth_header = request.headers.get("Authorization", "")
     api_key_header = request.headers.get("X-API-Key", "")
-    token = ""
-    if api_key_header:
-        token = api_key_header.strip()
-    elif auth_header.startswith("Bearer "):
-        token = auth_header[7:].strip()
-    from shared.settings import API_KEY
-    if token and token == API_KEY:
-        return True
-    return False
+    if 'X-API-Key' in request.headers or 'Authorization' in request.headers:
+        token = api_key_header.strip() if api_key_header else (
+            auth_header[7:].strip() if auth_header.startswith('Bearer ') else '')
+        owner_id = authenticate_api_key(api_key_collection(), token)
+        if owner_id and not User.objects(id=owner_id).first():
+            owner_id = None
+    else:
+        owner_id = str(current_user.get_id()) if current_user.is_authenticated else None
+    g.owner_id = owner_id
+    return owner_id
+
+
+def check_api_auth():
+    return request_owner_id() is not None
+
+
+def owned_task(task_id):
+    owner_id = request_owner_id()
+    if not owner_id or not isinstance(task_id, str):
+        return None
+    try:
+        if str(UUID(task_id)) != task_id:
+            return None
+    except (ValueError, AttributeError):
+        return None
+    return CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].find_one(
+        {'task': task_id, 'owner_id': owner_id})
+
+
+def enqueue_owned_task(result):
+    # Persist ownership before dispatch: status/authorization must work while queued.
+    tasks = CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']]
+    tasks.insert_one(dict(result, start=datetime.utcnow(), end=None, logs=[]))
+    try:
+        return CELERY.send_task(json_settings[environ['project_env']]['worker']['name'],
+                                args=[result],
+                                queue=json_settings[environ['project_env']]['worker']['queue'])
+    except Exception:
+        tasks.update_one({'task': result['task'], 'owner_id': result['owner_id']},
+                         {'$set': {'dispatch_failed': True}})
+        raise
+
+
+@APP.before_request
+def enforce_task_ownership():
+    task_id = (request.view_args or {}).get('task_id')
+    if task_id is None:
+        return None
+    if not check_api_auth():
+        return jsonify(error='Unauthorized'), 401
+    if not owned_task(task_id):
+        return jsonify(error='Task not found'), 404
+
+
+class ApiKeysView(BaseView):
+    def is_accessible(self):
+        return current_user.is_authenticated
+
+    def inaccessible_callback(self, name, **kwargs):
+        return redirect(url_for('admin.login_view', next=request.url))
+
+    @expose('/', methods=['GET', 'POST'])
+    def index(self):
+        owner_id = str(current_user.get_id())
+        new_token = None
+        if request.method == 'POST':
+            action = request.form.get('action')
+            if action == 'create':
+                try:
+                    new_token = create_api_key(api_key_collection(), owner_id,
+                                               request.form.get('label', ''))
+                except ValueError as exc:
+                    flash(str(exc), 'error')
+            elif action == 'revoke':
+                try:
+                    key_id = ObjectId(request.form.get('key_id', ''))
+                except Exception:
+                    return jsonify(error='Key not found'), 404
+                if not revoke_api_key(api_key_collection(), owner_id, key_id):
+                    return jsonify(error='Key not found'), 404
+                flash('API key revoked.', 'success')
+                return redirect(url_for('.index'))
+            else:
+                return jsonify(error='Invalid action'), 400
+        keys = list(api_key_collection().find({'owner_id': owner_id}, {'digest': 0})
+                    .sort('created_at', -1))
+        response = APP.make_response(self.render('api_keys.html', keys=keys, new_token=new_token))
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        return response
 
 
 @APP.route('/api/v1/analyze', methods=['POST'])
@@ -845,13 +939,14 @@ def api_analyze():
         return jsonify(error="Missing required 'url' parameter."), 400
 
     try:
-        validators.url(url)
+        url_validators.url(url)
     except Exception:
         return jsonify(error=f"Invalid URL format: '{url}'"), 400
 
     task_id = str(uuid4())
     result = {
         "task": task_id,
+        "owner_id": request_owner_id(),
         "buffer": url,
         "use_proxy": bool(data.get("use_tor", data.get("use_proxy", True))),
         "proxy": data.get("proxy", "socks5://proxy:9050"),
@@ -871,9 +966,7 @@ def api_analyze():
     if result['use_proxy'] and not result['proxy']:
         result['proxy'] = 'socks5://proxy:9050'
 
-    CELERY.send_task(json_settings[environ["project_env"]]["worker"]["name"],
-                     args=[result],
-                     queue=json_settings[environ["project_env"]]["worker"]["queue"])
+    enqueue_owned_task(result)
 
     return jsonify({
         "status": "queued",
@@ -1050,6 +1143,7 @@ ADMIN.add_link(CustomMenuLink(name='Logout', category='', url="/logout", icon_ty
 ADMIN.add_view(CustomViewBufferForm(name="New Analysis", endpoint='url', menu_icon_type='glyph', menu_icon_value='glyphicon-plus'))
 ADMIN.add_view(CustomQueueView(name="Task Queue", endpoint='queue', menu_icon_type='glyph', menu_icon_value='glyphicon-tasks', category='Monitor'))
 ADMIN.add_view(CustomLogsView(name="Active Logs", endpoint='activelogs', menu_icon_type='glyph', menu_icon_value='glyphicon-flash', category='Monitor'))
+ADMIN.add_view(ApiKeysView(name='API Keys', endpoint='apikeys', menu_icon_type='glyph', menu_icon_value='glyphicon-lock'))
 # Report / logs are reached from a task row in the queue, not from the sidebar.
 ADMIN.add_view(CustomReportView(name='Report', endpoint='report'))
 ADMIN.add_view(CustomTaskLogView(name='Task Log', endpoint='tasklog'))
@@ -1070,7 +1164,7 @@ def handle_all_errors(error):
     code = 500
     if isinstance(error, HTTPException):
         code = error.code
-    return jsonify(error='Error', code=code)
+    return jsonify(error='Error', code=code), code
 
 
 for exc in default_exceptions:

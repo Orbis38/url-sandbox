@@ -12,6 +12,7 @@ from qbsniffer import QSniffer
 from socket import gethostbyname
 import socket
 import time
+from os import path, makedirs
 
 def wait_and_rotate_tor(proxy_host="proxy", control_port=9051, secret="urlsandbox_tor_secret", max_wait_sec=30):
     """Wait for Tor to reach 100% bootstrap and rotate the circuit via SIGNAL NEWNYM."""
@@ -75,7 +76,9 @@ def wait_and_rotate_tor(proxy_host="proxy", control_port=9051, secret="urlsandbo
 if len(argv) == 2:
     print("[SandBox] Parsing arguments")
     parsed = jloads(unhexlify(argv[1]).decode())
-    analyzer_logs = TinyDB("{}{}{}".format(parsed['locations']['box_output'], parsed['task'], parsed['locations']['analyzer_logs']))
+    task_dir = path.join(parsed['locations']['box_output'], parsed['task'])
+    makedirs(task_dir, exist_ok=True)
+    analyzer_logs = TinyDB(path.join(task_dir, parsed['task'] + parsed['locations']['analyzer_logs']))
 
     if parsed.get('use_proxy'):
         print("[SandBox] Using Tor proxy gateway")
@@ -94,7 +97,7 @@ if len(argv) == 2:
 
     if parsed['sniffer_on']:
         print("[SandBox] Running Sniffer")
-        sniffer_logs = TinyDB("{}{}{}".format(parsed['locations']['box_output'], parsed['task'], parsed['locations']['sniffer_logs']))
+        sniffer_logs = TinyDB(path.join(task_dir, parsed['task'] + parsed['locations']['sniffer_logs']))
         x = QSniffer(parsed, '', 'eth0', sniffer_logs)
         x.run_sniffer(process=True)
     print("[SandBox] Testing with chrome webdriver")

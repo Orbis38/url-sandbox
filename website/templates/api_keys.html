@@ -1,0 +1,48 @@
+{% extends 'admin/master.html' %}
+{% block body %}
+{{ super() }}
+<div class="card new_card">
+  <div class="card-header"><div class="div-left">API Keys</div></div>
+  <div class="card-body width100">
+    <p>Keys can submit analyses and access only your tasks. Revoking a key immediately blocks new requests.</p>
+    {% if new_token %}
+    <div class="alert alert-success" role="status">
+      <p>Copy this key now. It will not be shown again.</p>
+      <code style="overflow-wrap:anywhere;user-select:all">{{ new_token }}</code>
+    </div>
+    {% endif %}
+    <form method="POST" action="{{ url_for('.index') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="create">
+      <label for="key-label">Key name</label>
+      <input id="key-label" name="label" type="text" maxlength="80" required class="form-control" placeholder="e.g. Local automation">
+      <button type="submit" class="btn" style="margin-top:12px">Create API key</button>
+    </form>
+    <div class="table-responsive" style="margin-top:24px">
+      <table class="table model-list">
+        <thead><tr><th>Name</th><th>Prefix</th><th>Created (UTC)</th><th>Last used (UTC)</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for key in keys %}
+          <tr>
+            <td>{{ key.label }}</td><td><code>{{ key.prefix }}…</code></td>
+            <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ key.last_used_at.strftime('%Y-%m-%d %H:%M') if key.last_used_at else 'Never' }}</td>
+            <td>{{ 'Revoked' if key.revoked_at else 'Active' }}</td>
+            <td>{% if not key.revoked_at %}
+              <form method="POST" action="{{ url_for('.index') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="revoke">
+                <input type="hidden" name="key_id" value="{{ key._id }}">
+                <button type="submit" class="btn btn-danger">Revoke</button>
+              </form>
+            {% endif %}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6">You have no API keys.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

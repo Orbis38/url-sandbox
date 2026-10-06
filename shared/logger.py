@@ -7,7 +7,7 @@ from sys import stdout
 from datetime import datetime
 from contextlib import contextmanager
 from shared.settings import defaultdb
-from shared.mongodbconn import add_item, update_task, update_task_by_uuid
+from shared.mongodbconn import CLIENT, add_item, update_task, update_task_by_uuid
 
 
 @contextmanager
@@ -28,7 +28,8 @@ def setup_task_logger(parsed):
     log_string("Setup task {} logger".format(parsed['task']), "Yellow")
     temp_dict = parsed.copy()
     temp_dict.update({"start": datetime.utcnow(), "end": None, "logs": []})
-    add_item(defaultdb["dbname"], defaultdb["taskdblogscoll"], temp_dict)
+    CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].update_one(
+        {'task': parsed['task']}, {'$setOnInsert': temp_dict}, upsert=True)
 
 
 def cancel_task_logger(task):

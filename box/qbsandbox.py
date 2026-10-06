@@ -513,6 +513,7 @@ def chrome_driver(parsed, analyzer_db):
     '''
     DISPLAY.start()
     vnc_processes = []
+    vnc_token = None
     ffmpeg_proc = None
     video_file = os.path.join(parsed['locations']['box_output'], parsed['task'], "session.mp4")
 
@@ -533,6 +534,7 @@ def chrome_driver(parsed, analyzer_db):
                 "-shared",
                 "-forever",
                 "-nopw",
+                "-localhost",
                 "-wait", "33",
                 "-defer", "20",
                 "-repeat",
@@ -542,11 +544,20 @@ def chrome_driver(parsed, analyzer_db):
         except Exception as e:
             print(f"[SandBox] Warning starting x11vnc: {e}", flush=True)
         try:
+            from secrets import token_urlsafe
+            vnc_token = token_urlsafe(32)
+            token_dir = os.path.join(parsed['locations']['box_output'], parsed['task'])
+            os.makedirs(token_dir, exist_ok=True)
+            token_path = os.path.join(token_dir, 'vnc.tokens')
+            with open(token_path, 'w') as token_file:
+                token_file.write(f'{vnc_token}: localhost:5900\n')
+            os.chmod(token_path, 0o600)
             ws_proc = Popen([
                 "websockify",
+                "--token-plugin", "TokenFile",
+                "--token-source", token_path,
                 "--web", "/usr/share/novnc",
-                "6080",
-                "localhost:5900"
+                "6080"
             ], stdout=DEVNULL, stderr=DEVNULL)
             vnc_processes.append(ws_proc)
         except Exception as e:
@@ -582,6 +593,7 @@ def chrome_driver(parsed, analyzer_db):
                 smf.write(dumps({
                     "task": parsed['task'],
                     "vnc_port": parsed.get('vnc_port'),
+                    "vnc_token": vnc_token,
                     "status": "active",
                     "record_vnc": bool(parsed.get('record_vnc')),
                     "has_video": False

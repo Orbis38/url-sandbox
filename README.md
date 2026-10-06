@@ -171,7 +171,7 @@ UrlProbe provides an isolated, multi-tenant interactive architecture designed to
 
 ### Key Technical Mechanisms:
 1. **Host-Level Port Reservation (`find_free_port`)**:
-   Rather than testing loopback interfaces inside isolated container namespaces, `worker.py` queries `DOCKER_CLIENT.containers.list()` to detect all ports actively bound on the Docker host, cross-referencing an atomic Redis set (`active_vnc_ports`). This guarantees zero port collisions across concurrent workers.
+   `worker.py` checks Docker bindings and the Redis set `active_vnc_ports`. Allocation is not atomic: concurrent workers can choose the same port before a container becomes visible. Session tickets prevent port knowledge from authorizing another user's session, but port collisions remain an open availability issue documented in the security assessment.
 2. **Per-Analysis Session Verification**:
    When opening any report, the frontend issues an asynchronous status check to `/live_interact/<task_id>/status`:
    - If the session for that **specific task** is still active, the assigned VNC port is dynamically loaded.
@@ -221,7 +221,13 @@ UrlProbe separates ephemeral execution from durable storage:
 
 ## REST API Documentation
 
-All API routes require authentication using the API key configured in `shared/settings.py` (or via environment variable `URL_SANDBOX_API_KEY`). Provide the key in the request header via `X-API-Key` or `Authorization: Bearer <token>`.
+Sign in and open **API Keys** in the sidebar to create a named key. Copy the token when it is shown: only its hash is stored, and the full token cannot be displayed again. The screen lists your keys, creation and last-use dates, and lets you revoke them.
+
+Provide the token in `X-API-Key` or `Authorization: Bearer <token>`. Each key acts as its creator and can access only that user's analyses. There is no default or environment-wide API key; `URL_SANDBOX_API_KEY` is no longer used. Revoked keys and keys belonging to deleted users are rejected. An explicitly supplied invalid token is rejected even when a browser session is present.
+
+The queue, active logs, reports, screenshots, video recordings and live-session controls are scoped to the authenticated user. New tasks are assigned an owner before they enter the queue. Legacy tasks without `owner_id` remain stored but are hidden; they must be assigned to a verified owner explicitly before they can be accessed.
+
+Interactive sessions require a random per-session WebSocket ticket supplied only by the authenticated status endpoint. Each sandbox mounts only its own task directory. Rebuild and restart the website, worker and box images together to apply these changes; sessions started by older images do not gain these protections automatically.
 
 ### 1. Submit URL for Analysis
 ```bash
@@ -369,8 +375,10 @@ sudo docker compose -f docker-compose-dev.yml logs -f workers_api
 
 1. **Firewall Ingress**: In production, restrict ports `27017` (MongoDB) and `6379` (Redis) to the local Docker network. Do not expose database ports to public interfaces.
 2. **Reverse Proxy & HTTPS**: Deploy an Nginx, Caddy, or Traefik reverse proxy in front of port `8000` with valid TLS certificates (Let's Encrypt).
-3. **Secret Keys**: Update the default `backend_key`, `URL_SANDBOX_API_KEY`, and MongoDB credentials in `shared/settings.py` before analyzing untrusted links in live SOC environments.
-4. **Sandbox Network Isolation**: The disposable `box` container connects exclusively through the `url-sandbox_frontend_box` bridge network, routing web requests strictly via the isolated Tor gateway when `use_proxy` is enabled.
+3. **Secret Keys**: Rotate the session-signing `backend_key`, Redis password and MongoDB credentials before analyzing untrusted links in live SOC environments. Create per-user API keys from the sidebar.
+4. **Sandbox Network Isolation**: The disposable `box` container uses the `url-sandbox_frontend_box` bridge. Browser and Requests traffic uses Tor when `use_proxy` is enabled, but this is not an egress firewall; apply network policies to block private and metadata destinations.
+
+See [SECURITY_ASSESSMENT.md](SECURITY_ASSESSMENT.md) for reproduced findings, remaining risks and test commands.
 
 ---
 

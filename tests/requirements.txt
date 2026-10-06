@@ -1,0 +1,6 @@
+# Runtime web dependencies are in webinterface-requirements.txt.
+pytest
+mongomock
+websockify
+websocket-client
+tinydb

@@ -6,6 +6,7 @@
 from json import dumps
 from base64 import b64encode
 from datetime import datetime
+from os import path
 from tinydb import TinyDB
 from binascii import unhexlify
 from jinja2 import Template, Environment, FileSystemLoader
@@ -138,8 +139,9 @@ def make_report(parsed):
     analyzer_db = None
     sniffer_db = None
 
-    analyzer_path = "{}{}{}".format(parsed['locations']['box_output'], parsed['task'], parsed['locations']['analyzer_logs'])
-    sniffer_path = "{}{}{}".format(parsed['locations']['box_output'], parsed['task'], parsed['locations']['sniffer_logs'])
+    task_dir = path.join(parsed['locations']['box_output'], parsed['task'])
+    analyzer_path = path.join(task_dir, parsed['task'] + parsed['locations']['analyzer_logs'])
+    sniffer_path = path.join(task_dir, parsed['task'] + parsed['locations']['sniffer_logs'])
 
     analyzer_db = TinyDB(analyzer_path)
     sniffer_db = TinyDB(sniffer_path)
@@ -501,7 +503,6 @@ def make_report(parsed):
                 }}
 
                 function initSession() {{
-                    var defaultUrl = proto + '//' + host + ':' + FALLBACK_PORT + '/vnc.html?autoconnect=true&resize=scale&reconnect=false';
                     var frame = document.getElementById('novnc-frame');
                     var newtab = document.getElementById('btn-newtab');
                     var sInfo = document.getElementById('live-session-info');
@@ -516,18 +517,20 @@ def make_report(parsed):
                             renderSessionEnded(resp);
                             return;
                         }}
-                        var port = (resp && resp.vnc_port) ? resp.vnc_port : FALLBACK_PORT;
-                        var vncUrl = proto + '//' + host + ':' + port + '/vnc.html?autoconnect=true&resize=scale&reconnect=false';
+                        if (!resp || !resp.vnc_token || !resp.vnc_port) {{
+                            if (sInfo) {{ sInfo.textContent = 'Session unavailable'; }}
+                            return;
+                        }}
+                        var port = resp.vnc_port;
+                        var socketPath = encodeURIComponent('websockify?token=' + resp.vnc_token);
+                        var vncUrl = proto + '//' + host + ':' + port + '/vnc.html?autoconnect=true&resize=scale&reconnect=false&path=' + socketPath;
                         if (frame) {{ frame.src = vncUrl; }}
                         if (newtab) {{ newtab.href = vncUrl; }}
                         if (sInfo) {{ sInfo.innerHTML = '<span style="color:#818cf8;font-weight:600;">Porta ' + port + '</span> &bull; Analisi: ' + TASK.substring(0, 8); }}
                         pollInterval = setInterval(checkStatus, 4000);
                     }})
                     .catch(function() {{
-                        if (frame) {{ frame.src = defaultUrl; }}
-                        if (newtab) {{ newtab.href = defaultUrl; }}
-                        if (sInfo) {{ sInfo.innerHTML = '<span style="color:#818cf8;font-weight:600;">Porta ' + FALLBACK_PORT + '</span> &bull; Analisi: ' + TASK.substring(0, 8); }}
-                        pollInterval = setInterval(checkStatus, 4000);
+                        if (sInfo) {{ sInfo.textContent = 'Unable to authorize session'; }}
                     }});
                 }}
 

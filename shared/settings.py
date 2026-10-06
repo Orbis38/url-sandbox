@@ -1,8 +1,5 @@
 __V__ = "2020.V.02.39"
 
-from os import environ
-API_KEY = environ.get("URL_SANDBOX_API_KEY", "urlsandbox_default_api_key_change_in_production")
-
 defaultdb = {
     "dbname": "urlsandbox",
     "reportscoll": "reports",
@@ -55,5 +52,4 @@ meta_users_settings = {
     'collection': defaultdb["userscoll"],
     'strict': False
 }
-
 

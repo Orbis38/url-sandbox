@@ -3,7 +3,8 @@
     backend -> worker
 '''
 
-from os import environ, path
+from os import environ, path, makedirs
+from uuid import UUID
 from time import sleep
 from docker import from_env
 from binascii import hexlify
@@ -89,6 +90,9 @@ def release_vnc_port(port):
 
 @CELERY.task(bind=True, name=json_settings[environ["project_env"]]["worker"]["name"], queue=json_settings[environ["project_env"]]["worker"]["queue"], soft_time_limit=json_settings[environ["project_env"]]["worker"]["task_time_limit"], time_limit=json_settings[environ["project_env"]]["worker"]["task_time_limit"] + 10, max_retries=0, default_retry_delay=5)
 def analyze_url(self, parsed):
+    # Broker input must not select arbitrary filesystem paths/container names.
+    if str(UUID(parsed['task'])) != parsed['task'] or not parsed.get('owner_id'):
+        raise ValueError('A canonical task UUID and owner are required')
     setup_task_logger(parsed)
     log_string("Start analyzing", task=parsed['task'])
     temp_container = None
@@ -100,7 +104,7 @@ def analyze_url(self, parsed):
         except BaseException:
             pass
         log_string(parsed["domain"], task=parsed['task'])
-        parsed['locations'] = json_settings[environ["project_env"]]["task_logs"]
+        parsed['locations'] = dict(json_settings[environ["project_env"]]["task_logs"])
         ports = None
         if parsed.get('interactive'):
             vnc_port = find_free_port(6080, 6100)
@@ -113,6 +117,15 @@ def analyze_url(self, parsed):
             log_string("Direct network connection (no proxy)", task=parsed['task'])
 
         output_vol = json_settings[environ["project_env"]].get("docker_volume_output") or json_settings[environ["project_env"]]["output_folder"]
+        task_output = path.join(json_settings[environ['project_env']]['output_folder'], parsed['task'])
+        makedirs(task_output, exist_ok=True)
+        if json_settings[environ['project_env']].get('docker_volume_output'):
+            host_output = DOCKER_CLIENT.volumes.get(output_vol).attrs['Mountpoint']
+        else:
+            host_output = output_vol
+        # Bind only this task's directory, never the entire shared artifact volume.
+        host_task_output = path.join(host_output, parsed['task'])
+        box_task_output = path.join(parsed['locations']['box_output'], parsed['task'])
         container_name = f"url-sandbox_box_{parsed['task']}"
         try:
             existing_c = DOCKER_CLIENT.containers.get(container_name)
@@ -124,7 +137,7 @@ def analyze_url(self, parsed):
             "url-sandbox-box",
             name=container_name,
             command=[hexlify(jdumps(parsed).encode()).decode()],
-            volumes={output_vol: {'bind': json_settings[environ["project_env"]]["task_logs"]["box_output"], 'mode': 'rw'}},
+            volumes={host_task_output: {'bind': box_task_output, 'mode': 'rw'}},
             detach=True,
             network="url-sandbox_frontend_box",
             ports=ports
