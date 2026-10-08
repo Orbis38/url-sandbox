@@ -16,39 +16,41 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from tinydb import TinyDB
-from binascii import hexlify
 from bs4 import BeautifulSoup
-from requests import get as rget, head as rhead
-from requests.packages.urllib3.connection import VerifiedHTTPSConnection
+from requests import get as rget
 from networkx import Graph, circular_layout
 from io import BytesIO
 from dns.resolver import resolve
+from concurrent.futures import ThreadPoolExecutor
+from shared.artifacts import save_image, preview_jpeg
 import matplotlib.pyplot as plt
 
 filterwarnings("ignore", category=DeprecationWarning)
-DISPLAY = Display(visible=0, size=(1440, 900))
-X509 = None
+DISPLAY = Display(visible=0, size=(1280, 720))
 
 
 def get_dns(parsed, extracted_table):
     try:
-        temp_list = []
-        for records in ['A', 'AAAA', 'CNAME', 'MX', 'SRV', 'TXT', 'SOA', 'NS']:
+        def lookup(records):
             try:
-                answer = resolve(parsed['domain'], records, raise_on_no_answer=False)
+                answer = resolve(parsed['domain'], records, raise_on_no_answer=False, lifetime=5)
                 if answer.rrset is not None:
-                    temp_list.append({records: answer.rrset.to_text()})
+                    return {records: answer.rrset.to_text()}
             except BaseException:
                 pass
+            return None
+        records = ['A', 'AAAA', 'CNAME', 'MX', 'SRV', 'TXT', 'SOA', 'NS']
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            temp_list = [answer for answer in pool.map(lookup, records) if answer is not None]
         if len(temp_list) > 0:
             extracted_table.insert({'dns_records': temp_list})
     except Exception as e:
         print(e)
         print("[SandBox] get_dns failed")
 
-def make_network(analyzer_table, network_graph):
+def make_network(analyzer_table, network_graph, task_dir):
     try:
-        list_domain_counters = []
+        list_domain_counters = set()
         dict_domain_counters = {}
         domain_counter = 0
         for item in analyzer_table.all():
@@ -56,12 +58,12 @@ def make_network(analyzer_table, network_graph):
                 if 'headers' in item:
                     if 'Host' in item['headers']:
                         if item['headers']['Host'] not in list_domain_counters:
-                            list_domain_counters.append(item['headers']['Host'])
+                            list_domain_counters.add(item['headers']['Host'])
                             dict_domain_counters.update({domain_counter: item['headers']['Host']})
                             domain_counter += 1
                     if ':authority' in item['headers']:
                         if item['headers'][':authority'] not in list_domain_counters:
-                            list_domain_counters.append(item['headers'][':authority'])
+                            list_domain_counters.add(item['headers'][':authority'])
                             dict_domain_counters.update({domain_counter: item['headers'][':authority']})
                             domain_counter += 1
             except BaseException:
@@ -90,85 +92,55 @@ def make_network(analyzer_table, network_graph):
                 ax.text(x, y, G.nodes[node]['text'], fontsize=10, bbox=dict(boxstyle='round', facecolor='#D3D3D3', alpha=1, linewidth=0), zorder=99)
             ax.axis('off')
             buf = BytesIO()
-            plt.savefig(buf, bbox_inches='tight', dpi=100)
+            fig.savefig(buf, bbox_inches='tight', dpi=100)
+            plt.close(fig)
             buf.seek(0)
-            network_graph.insert({'circular_layout': hexlify(buf.read()).decode('utf-8')})
+            network_graph.insert({'circular_layout': save_image(task_dir, 'circular_layout', buf.read())})
             print("[SandBox] saved network graph")
     except BaseException:
         print("[SandBox] make_network failed")
 
 
 def get_headers(parsed, extracted_table):
+    response = None
     try:
-        response = None
         headers = {'User-Agent': parsed['useragent_mapped']}
         proxy_url = parsed.get('requests_proxy') or parsed.get('proxy')
+        proxies = None
         if parsed.get('use_proxy') and proxy_url:
             proxies = {'http': proxy_url,
                        'https': proxy_url}
-            response = rhead(parsed['buffer'], proxies=proxies, headers=headers, timeout=10)
-            response.headers['response_status'] = response.status_code
-        else:
-            response = rhead(parsed['buffer'], headers=headers, timeout=10)
-            response.headers['response_status'] = response.status_code
-        if len(response.headers) > 0:
-            extracted_table.insert({'Request_Headers': dict(response.request.headers)})
-            extracted_table.insert({'Response_Headers': dict(response.headers)})
+        # One streamed inspection request, instead of HEAD plus a full-body GET.
+        response = rget(parsed['buffer'], proxies=proxies, headers=headers, timeout=10, stream=True)
+        initial = response.history[0] if response.history else response
+        response_headers = dict(initial.headers, response_status=initial.status_code)
+        if response_headers:
+            extracted_table.insert_multiple([
+                {'Request_Headers': dict(initial.request.headers)},
+                {'Response_Headers': response_headers},
+            ])
             print("[SandBox] extracted request and response headers")
+        get_cert(parsed, extracted_table, response)
     except Exception as e:
         print("[SandBox] get_headers failed")
+    finally:
+        if response is not None:
+            response.close()
 
 
-def get_cert(parsed, extracted_table):
+def get_cert(parsed, extracted_table, response):
     try:
         mapped = {b'CN': b'Common Name', b'OU': b'Organizational Unit', b'O': b'Organization', b'L': b'Locality', b'ST': b'State Or Province Name', b'C': b'Country Name'}
         import OpenSSL.crypto
-        from urllib3.connection import HTTPSConnection
-        try:
-            from urllib3.contrib.socks import SOCKSHTTPSConnection
-        except Exception:
-            SOCKSHTTPSConnection = None
-
-        global X509
-        X509 = None
-
-        def extract_x509(sock):
-            global X509
-            try:
-                if hasattr(sock, 'connection'):
-                    X509 = sock.connection.get_peer_certificate()
-                elif hasattr(sock, 'getpeercert'):
-                    der = sock.getpeercert(binary_form=True)
-                    if der:
-                        X509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, der)
-            except Exception:
-                pass
-
-        orig_https = HTTPSConnection.connect
-        def hooked_https(self):
-            orig_https(self)
-            extract_x509(self.sock)
-        HTTPSConnection.connect = hooked_https
-
-        if SOCKSHTTPSConnection:
-            orig_socks = SOCKSHTTPSConnection.connect
-            def hooked_socks(self):
-                orig_socks(self)
-                extract_x509(self.sock)
-            SOCKSHTTPSConnection.connect = hooked_socks
-
-        headers = {'User-Agent': parsed['useragent_mapped']}
-        proxy_url = parsed.get('requests_proxy') or parsed.get('proxy')
-        if parsed.get('use_proxy') and proxy_url:
-            proxies = {'http': proxy_url,
-                       'https': proxy_url}
-            rget(parsed['buffer'], proxies=proxies, headers=headers, timeout=10)
-        else:
-            rget(parsed['buffer'], headers=headers, timeout=10)
-
-        if not X509:
+        connection = getattr(response.raw, 'connection', None)
+        sock = getattr(connection, 'sock', None)
+        if sock is None or not hasattr(sock, 'getpeercert'):
             print("[SandBox] get_cert: no certificate captured")
             return
+        der = sock.getpeercert(binary_form=True)
+        if not der:
+            return
+        X509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_ASN1, der)
         List_ = {}
         List_['Subjects'] = []
         for subject in X509.get_subject().get_components():
@@ -185,8 +157,9 @@ def get_cert(parsed, extracted_table):
                 pass
         List_['Issuer Hash'] = X509.get_issuer().hash()
         List_['Extensions'] = []
-        for extension in range(X509.get_extension_count()):
-            List_['Extensions'].append({X509.get_extension(extension).get_short_name().decode('utf-8'): X509.get_extension(extension).__str__()})
+        for extension in X509.to_cryptography().extensions:
+            name = extension.oid._name or extension.oid.dotted_string
+            List_['Extensions'].append({name: str(extension.value)})
         List_['Expired'] = X509.has_expired()
         List_['Valid From'] = X509.get_notBefore().decode('utf-8')
         List_['Valid Until'] = X509.get_notAfter().decode('utf-8')
@@ -247,28 +220,22 @@ def make_ai_screenshot_jpeg(png_bytes, max_size=(1280, 800), quality=82):
     Create a compressed, downscaled JPEG specifically optimized for local AI vision models (Gemma)
     '''
     try:
-        from PIL import Image
-        import io
-        img = Image.open(io.BytesIO(png_bytes)).convert('RGB')
-        img.thumbnail(max_size, Image.Resampling.LANCZOS)
-        buf = io.BytesIO()
-        img.save(buf, format='JPEG', quality=quality, optimize=True)
-        return buf.getvalue()
+        return preview_jpeg(png_bytes, max_size, quality)
     except Exception as e:
         print(f"[SandBox] make_ai_screenshot_jpeg failed: {e}", flush=True)
         return None
 
 
-def take_normal_screen_shot(driver, screenshot_table):
+def take_normal_screen_shot(driver, screenshot_table, task_dir):
     '''
     get normal screenshot and generate lightweight JPEG for AI vision (Gemma)
     '''
     try:
         screenshot = driver.get_screenshot_as_png()
-        entry = {'normal_image': hexlify(screenshot).decode('utf-8')}
+        entry = {'normal_image': save_image(task_dir, 'normal_image', screenshot)}
         ai_jpeg = make_ai_screenshot_jpeg(screenshot)
         if ai_jpeg:
-            entry['ai_image_jpeg'] = hexlify(ai_jpeg).decode('utf-8')
+            entry['ai_image_jpeg'] = save_image(task_dir, 'ai_image_jpeg', ai_jpeg)
         screenshot_table.insert(entry)
         print("[SandBox] Screenshot saved (including AI vision JPEG)")
     except BaseException:
@@ -395,14 +362,14 @@ def extract_phishing_heuristics(driver, parsed, extracted_table):
         return {}
 
 
-def take_full_screen_shot(driver, screenshot_table):
+def take_full_screen_shot(driver, screenshot_table, task_dir):
     '''
     capture full screenshot
     '''
     try:
         element = driver.find_element(By.TAG_NAME, 'html')
-        screenshot = element.get_screenshot_as_png()
-        screenshot_table.insert({'full_image': hexlify(screenshot).decode('utf-8')})
+        screenshot = element.screenshot_as_png
+        screenshot_table.insert({'full_image': save_image(task_dir, 'full_image', screenshot)})
         print("[SandBox] Screenshot saved")
     except BaseException:
         print("[SandBox] take_full_screen_shot failed")
@@ -429,15 +396,20 @@ def find_key(key, data):
 
 def parse_ouput(logs, table):
     try:
-        performance_events = [loads(e['message'])['message'] for e in logs]
-        network_events = [e for e in performance_events if 'network.' in e['method'].lower()]
-        for _ in network_events:
-            rec = find_key("headers", _)
+        rows = []
+        for event in logs:
+            try:
+                message = loads(event['message'])['message']
+                method = message['method']
+                if method not in ('Network.responseReceived', 'Network.requestWillBeSent'):
+                    continue
+                rec = find_key('headers', message)
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
             if rec:
-                if "Network.responseReceived" in _["method"]:
-                    table.insert({"type": "Received", "headers": rec})
-                elif "Network.requestWillBeSent" in _["method"]:
-                    table.insert({"type": "Sent", "headers": rec})
+                rows.append({'type': 'Received' if method == 'Network.responseReceived' else 'Sent', 'headers': rec})
+        if rows:
+            table.insert_multiple(rows)
         print("[SandBox] parsed output")
     except BaseException:
         print("[SandBox] parse_ouput failed")
@@ -516,6 +488,7 @@ def chrome_driver(parsed, analyzer_db):
     vnc_token = None
     ffmpeg_proc = None
     video_file = os.path.join(parsed['locations']['box_output'], parsed['task'], "session.mp4")
+    task_dir = os.path.dirname(video_file)
 
     if parsed.get('interactive'):
         disp = getattr(DISPLAY, 'new_display_var', None) or os.environ.get("DISPLAY", ":0")
@@ -570,7 +543,7 @@ def chrome_driver(parsed, analyzer_db):
                 print(f"[SandBox] Starting ffmpeg recording of {disp} to {video_file}", flush=True)
                 ffmpeg_proc = Popen([
                     "ffmpeg", "-y",
-                    "-video_size", "1440x900",
+                    "-video_size", "1280x720",
                     "-framerate", "15",
                     "-f", "x11grab",
                     "-i", f"{disp}.0",
@@ -613,7 +586,7 @@ def chrome_driver(parsed, analyzer_db):
     # captures the rendered document.
     chrome_options.page_load_strategy = 'eager'
     if parsed.get('interactive'):
-        chrome_options.add_argument('--window-size=1440,900')
+        chrome_options.add_argument('--window-size=1280,720')
         chrome_options.add_argument('--window-position=0,0')
         chrome_options.add_argument('--start-maximized')
         chrome_options.add_argument('--disable-infobars')
@@ -643,7 +616,10 @@ def chrome_driver(parsed, analyzer_db):
     chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     service = Service(executable_path="/usr/bin/chromedriver")
     chromebrowser = webdriver.Chrome(options=chrome_options, service=service)
-    chromebrowser.set_window_size(1440, 900)
+    if parsed.get('interactive'):
+        chromebrowser.set_window_size(1280, 720)
+    else:
+        chromebrowser.set_window_size(1440, 900)
     # Bind the interactive control socket BEFORE the (potentially long) page
     # analysis so the file exists immediately. The backend only waits for the
     # socket to appear within analyzer_timeout; binding late (after page load +
@@ -678,18 +654,17 @@ def chrome_driver(parsed, analyzer_db):
     if parsed.get('block_cookies'):
         dismiss_cookie_banners(chromebrowser, settle=0 if parsed.get('interactive') else 0.6)
     performance_logs = chromebrowser.get_log('performance')
-    get_cert(parsed, extracted_table)
     get_all_links(chromebrowser.page_source, extracted_table)
     get_all_scripts(chromebrowser.page_source, extracted_table)
     extract_phishing_heuristics(chromebrowser, parsed, extracted_table)
     should_take_normal = parsed.get('take_screenshot', False) or (parsed.get('take_screenshot') is None and parsed.get('take_full_screenshot'))
     should_take_full = parsed.get('take_full_screenshot', False)
     if should_take_full:
-        take_full_screen_shot(chromebrowser, screenshot_table)
+        take_full_screen_shot(chromebrowser, screenshot_table, task_dir)
     if should_take_normal:
-        take_normal_screen_shot(chromebrowser, screenshot_table)
+        take_normal_screen_shot(chromebrowser, screenshot_table, task_dir)
     parse_ouput(performance_logs, analyzer_table)
-    make_network(analyzer_table, network_table)
+    make_network(analyzer_table, network_table, task_dir)
     if parsed.get('interactive') and interactive_server is not None:
         # Signal the backend that the initial analysis (screenshots, cert,
         # network graph, …) is fully written to the shared output, so it can
@@ -880,7 +855,7 @@ def serve_interactive(server, driver, parsed, analyzer_db):
                     try:
                         screenshot = driver.get_screenshot_as_png()
                         screenshot_table.truncate()
-                        screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                        screenshot_table.insert({'normal_image': save_image(os.path.dirname(socket_path), 'normal_image', screenshot)})
                         img_base64 = b64encode(screenshot).decode('utf-8')
                         conn.sendall(json.dumps({"status": "ok", "message": "closed", "screenshot": img_base64}).encode('utf-8'))
                     except Exception as se:
@@ -897,17 +872,17 @@ def serve_interactive(server, driver, parsed, analyzer_db):
                 if take_full:
                     try:
                         element = driver.find_element(By.TAG_NAME, 'html')
-                        full_screenshot = element.get_screenshot_as_png()
+                        full_screenshot = element.screenshot_as_png
                         screenshot_table.insert({
-                            'normal_image': hexlify(screenshot).decode('utf-8'),
-                            'full_image': hexlify(full_screenshot).decode('utf-8')
+                            'normal_image': save_image(os.path.dirname(socket_path), 'normal_image', screenshot),
+                            'full_image': save_image(os.path.dirname(socket_path), 'full_image', full_screenshot)
                         })
                         full_img_base64 = b64encode(full_screenshot).decode('utf-8')
                     except Exception as fe:
                         print(f"[SandBox] Interactive full screenshot failed: {fe}", flush=True)
-                        screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                        screenshot_table.insert({'normal_image': save_image(os.path.dirname(socket_path), 'normal_image', screenshot)})
                 else:
-                    screenshot_table.insert({'normal_image': hexlify(screenshot).decode('utf-8')})
+                    screenshot_table.insert({'normal_image': save_image(os.path.dirname(socket_path), 'normal_image', screenshot)})
                 
                 img_base64 = b64encode(screenshot).decode('utf-8')
                 response = {

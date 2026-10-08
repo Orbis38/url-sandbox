@@ -10,6 +10,7 @@ import pytest
 def web():
     patch = pytest.MonkeyPatch()
     patch.setenv('project_env', 'docker')
+    patch.setenv('URL_SANDBOX_SESSION_SECRET', __import__('secrets').token_urlsafe(64))
     import pymongo
     import mongoengine.connection
     from celery.app.control import Control
@@ -63,7 +64,14 @@ def original_web(web):
     module.__file__ = str(ROOT / 'website/web.py')
     module.__spec__ = importlib.util.spec_from_file_location(module.__name__, module.__file__)
     sys.modules[module.__name__] = module
-    exec(compile(original_source('website/web.py'), module.__file__, 'exec'), module.__dict__)
+    from shared.settings import json_settings
+    old_settings = {}
+    exec(original_source('shared/settings.py'), old_settings)
+    json_settings['docker']['backend_key'] = old_settings['json_settings']['docker']['backend_key']
+    try:
+        exec(compile(original_source('website/web.py'), module.__file__, 'exec'), module.__dict__)
+    finally:
+        json_settings['docker'].pop('backend_key', None)
     module.APP.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
     yield module
     sys.modules.pop(module.__name__, None)

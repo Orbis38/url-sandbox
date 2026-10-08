@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from gridfs import GridFS
 from shared.settings import defaultdb, json_settings
 from shared.mongodbconn import CLIENT
+from uuid import UUID
 
 
 def cleanup_expired_analyses(days=60, project_env=None):
@@ -26,9 +27,7 @@ def cleanup_expired_analyses(days=60, project_env=None):
 
         taskdb_coll = CLIENT[db_name][defaultdb["taskdblogscoll"]]
         # Find tasks where start is older than cutoff date
-        expired_docs = list(taskdb_coll.find({"start": {"$lt": cutoff}}))
-        if not expired_docs:
-            return 0
+        expired_docs = taskdb_coll.find({"start": {"$lt": cutoff}}, {'task': 1})
 
         gfs = GridFS(CLIENT[db_name])
         output_folder = json_settings[project_env]["output_folder"]
@@ -54,11 +53,22 @@ def cleanup_expired_analyses(days=60, project_env=None):
                 except Exception:
                     pass
 
+            for artifact in CLIENT[db_name][defaultdb['artifactscoll']].find({'task': task_id}):
+                gfs.delete(artifact['file'])
+            CLIENT[db_name][defaultdb['artifactscoll']].delete_many({'task': task_id})
+            CLIENT[db_name][defaultdb['loglinescoll']].delete_many({'task': task_id})
+
             # 2. Clean up disk output artifacts (logs, screenshots, videos, sockets)
             try:
+                if str(UUID(task_id)) != task_id:
+                    continue
                 task_dir = path.join(output_folder, task_id)
-                if path.exists(task_dir):
+                if path.exists(task_dir) and not path.islink(task_dir):
                     shutil.rmtree(task_dir, ignore_errors=True)
+                for suffix in ('-analyzer.logs', '-sniffer.logs'):
+                    legacy = path.join(output_folder, task_id + suffix)
+                    if path.isfile(legacy) and not path.islink(legacy):
+                        __import__('os').unlink(legacy)
             except Exception:
                 pass
 

@@ -15,17 +15,22 @@ from qbreport import make_report
 from shared.settings import json_settings
 from shared.logger import log_string, setup_task_logger, ignore_exception, cancel_task_logger
 from shared.retention import cleanup_expired_analyses
+from shared.mongodbconn import ensure_indexes
+from shared.security import validate_timeouts
 
 DOCKER_CLIENT = from_env()
+ensure_indexes()
 CELERY = Celery(json_settings[environ["project_env"]]["celery_settings"]["name"],
                 broker=json_settings[environ["project_env"]]["celery_settings"]["celery_broker_url"],
                 backend=json_settings[environ["project_env"]]["celery_settings"]["celery_result_backend"])
 
 CELERY.conf.update(
-    CELERY_ACCEPT_CONTENT=["json"],
-    CELERY_TASK_SERIALIZER="json",
-    CELERY_RESULT_SERIALIZER="json",
-    CELERY_TIMEZONE="America/Los_Angeles"
+    task_acks_late=False,
+    task_reject_on_worker_lost=False,
+    accept_content=["json"],
+    task_serializer="json",
+    result_serializer="json",
+    timezone="America/Los_Angeles"
 )
 
 # Run retention cleanup on startup to ensure 60-day policy (users kept indefinitely)
@@ -93,9 +98,12 @@ def analyze_url(self, parsed):
     # Broker input must not select arbitrary filesystem paths/container names.
     if str(UUID(parsed['task'])) != parsed['task'] or not parsed.get('owner_id'):
         raise ValueError('A canonical task UUID and owner are required')
-    setup_task_logger(parsed)
+    parsed.update(validate_timeouts(parsed))
+    if not setup_task_logger(parsed):
+        return  # A started/terminal task must never be automatically replayed.
     log_string("Start analyzing", task=parsed['task'])
     temp_container = None
+    outcome, failure = 'completed', None
     try:
         parsed["domain"] = ""
         try:
@@ -140,7 +148,8 @@ def analyze_url(self, parsed):
             volumes={host_task_output: {'bind': box_task_output, 'mode': 'rw'}},
             detach=True,
             network="url-sandbox_frontend_box",
-            ports=ports
+            ports=ports,
+            labels={'url-sandbox.managed': 'true', 'url-sandbox.task': parsed['task']}
         )
         temp_logs = ""
         if parsed.get('interactive'):
@@ -171,23 +180,29 @@ def analyze_url(self, parsed):
             if ready:
                 log_string("Interactive analysis complete, session ready!", task=parsed['task'])
             else:
+                outcome, failure = 'timed_out', 'Initial interactive analysis did not complete in time'
                 # Do NOT kill the container here: the interactive session must
                 # stay alive for interactive_timeout, managed by the box. Build
                 # the report from whatever analysis produced so far.
                 log_string("Interactive analysis marker not seen in time; keeping session alive", task=parsed['task'])
         else:
+            finished = False
             for item in range(1, parsed['analyzer_timeout']):
                 try:
                     temp_container.reload()
                     if temp_container.status == 'exited':
                         temp_logs = temp_container.logs()
+                        finished = b'Done!!' in temp_logs
                         break
                 except Exception:
                     pass
                 temp_logs = temp_container.logs()
                 if len(temp_logs) > 1 and b"Done!!" in temp_logs:
+                    finished = True
                     break
                 sleep(1)
+            if not finished:
+                outcome, failure = 'timed_out', 'Analysis stopped before completion'
             try:
                 temp_container.stop()
             except Exception:
@@ -201,6 +216,7 @@ def analyze_url(self, parsed):
         log_string("Parsing output", task=parsed['task'])
         parsed['locations']['box_output'] = json_settings[environ["project_env"]]["output_folder"]
     except Exception as e:
+        outcome, failure = 'failed', str(e)
         log_string("Error -> {}".format(e), task=parsed['task'])
         if temp_container is not None:
             try:
@@ -221,4 +237,5 @@ def analyze_url(self, parsed):
         make_report(parsed)
     except Exception as e:
         log_string("Report error -> {}".format(e), task=parsed['task'])
-    cancel_task_logger(parsed['task'])
+        outcome, failure = 'failed', 'Report generation failed'
+    cancel_task_logger(parsed['task'], outcome, failure)

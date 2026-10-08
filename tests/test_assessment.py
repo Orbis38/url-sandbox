@@ -34,15 +34,19 @@ def test_baseline_default_key_accepted(env, original_web, monkeypatch):
     assert response.status_code == 201 and dispatched
 
 
-def test_known_session_secret_forges_identity_on_current_app(env):
+def test_original_session_secret_no_longer_forges_identity(env):
     web, db, alice, bob, _ = env
     task = str(uuid4())
     db.taskdblogs.insert_one({'task': task, 'owner_id': str(alice.id), 'start': datetime.utcnow()})
-    signer = web.APP.session_interface.get_signing_serializer(web.APP)
+    old = {}
+    exec(original_source('shared/settings.py'), old)
+    legacy = Flask('legacy_signer')
+    legacy.secret_key = old['json_settings']['docker']['backend_key']
+    signer = legacy.session_interface.get_signing_serializer(legacy)
     forged = signer.dumps({'_user_id': str(alice.id), '_fresh': True})
     client = web.APP.test_client()
     client.set_cookie('localhost', web.APP.config['SESSION_COOKIE_NAME'], forged)
-    assert client.get('/api/v1/tasks/' + task).status_code == 200
+    assert client.get('/api/v1/tasks/' + task).status_code == 401
 
 
 def test_baseline_cross_user_and_query_injection_return_private_report(env, original_web):
@@ -112,6 +116,11 @@ def test_failed_worker_job_is_marked_completed(env):
                      textract=lambda _: SimpleNamespace(domain='example', suffix='com'),
                      hexlify=lambda v: v.hex().encode(), jdumps=lambda v: '{}',
                      release_vnc_port=lambda p: None, make_report=fail)
+    from shared.mongodbconn import add_item, update_task_by_uuid
+    namespace.update(defaultdb=web.defaultdb, datetime=datetime, add_item=add_item,
+                     update_task_by_uuid=update_task_by_uuid)
+    original_function('shared/logger.py','setup_task_logger',namespace)
+    original_function('shared/logger.py','cancel_task_logger',namespace)
     source = ast.parse(original_source('backend/worker.py'))
     node = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == 'analyze_url')
     node.decorator_list = []

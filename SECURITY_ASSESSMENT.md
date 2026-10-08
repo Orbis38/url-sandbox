@@ -2,6 +2,8 @@
 
 Date: 2026-10-06. Original assessment baseline: `c138b775fd3857a0093e44f5927317eeff572fea`.
 
+**Historical baseline assessment. Updated 2026-10-08:** the five agreed hardening changes are now implemented and deployed. For current dispositions and operational impact, use [SECURITY_REMAINING.md](SECURITY_REMAINING.md); statements below about open findings reflect the earlier assessment unless explicitly updated.
+
 Baseline reproductions read that commit through `git show`; they do not reset or modify the worktree. A passing **assessment** test means that the stated baseline behavior was reproduced, not that the vulnerability is fixed. Regression tests separately exercise the updated implementation.
 
 ## Implemented changes
@@ -13,9 +15,9 @@ Baseline reproductions read that commit through `git show`; they do not reset or
 - Live VNC requires a random session ticket; raw x11vnc listens only on localhost. Each box mounts only its own output directory. Log artifacts and the report builder now use that directory consistently.
 - Fixed a colliding `validators` import that made incorrect passwords raise an AttributeError, and preserved proper HTTP status codes in the error handler.
 
-The changes require rebuilding/restarting website, worker and box together. No deployment was performed. Old sessions are not retroactively secured. Legacy tasks are not automatically attributed because the original data does not record a trustworthy owner.
+At the time of the initial assessment deployment had not been performed. The updated stack was subsequently rebuilt, started and tested end to end. Legacy tasks are not automatically attributed because the original data does not record a trustworthy owner.
 
-**The public Flask signing secret remains unchanged.** A forged cookie can still impersonate another user when their ID is known. Therefore ownership checks improve normal access control but do not establish a trustworthy authentication boundary until the signing secret is rotated. MongoDB/Redis credentials also remain unchanged.
+**Updated 2026-10-08:** the public Flask signing secret has been removed and rotated to a persistent private installation key. Old-secret cookie forgery is rejected on the deployed stack. MongoDB/Redis ports now bind to localhost; their static credentials remain a residual risk.
 
 ## Verification environment and limits
 

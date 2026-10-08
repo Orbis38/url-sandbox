@@ -7,12 +7,13 @@ defaultdb = {
     "userscoll": "users",
     "alllogscoll": "alllogs",
     "taskfileslogscoll": "taskfileslogs",
-    "taskdblogscoll": "taskdblogs"
+    "taskdblogscoll": "taskdblogs",
+    "artifactscoll": "artifacts",
+    "loglinescoll": "task_log_lines"
 }
 
 json_settings = {
     "docker": {
-        "backend_key": "w9AMMSqmKo4gFfE3s!Ghy4cRbE]xiynWKJhoUN(!1IfsOpJ0Z1KypX2uXhfH(lsQQqQ92pvDobxBC_oc^3M,0EzuO2wGk9fzhO0aWpkzSA7WXf2kDKafLpevawhfxJa09=#OJmlCNJE9Fa107A@g1s",
         "mongo_settings_host": "mongodb",
         "mongo_settings": "mongodb://changeme_9620eh26sfvka017fx:changeme_0cx821ncf7qg17ahx3@mongodb:27017/?authSource=admin",
         "redis_settings": "redis://:changeme_927dhgs810d712fxs1@url-sandbox_redis:6379/0",
@@ -52,4 +53,3 @@ meta_users_settings = {
     'collection': defaultdb["userscoll"],
     'strict': False
 }
-

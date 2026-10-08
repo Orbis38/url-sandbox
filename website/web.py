@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from datetime import timedelta, datetime
 from json import dumps
 from bson.objectid import ObjectId
-from flask import Flask, flash, g, jsonify, redirect, request, session, url_for, send_file
+from flask import Flask, flash, g, jsonify, redirect, request, session, url_for, send_file, Response
 from flask_mongoengine import MongoEngine
 from wtforms.widgets import ListWidget, CheckboxInput
 from wtforms import form, fields, validators, SelectMultipleField
@@ -27,9 +27,12 @@ from validator_collection import validators as url_validators
 from werkzeug.exceptions import HTTPException, default_exceptions
 from shared.settings import defaultdb, json_settings, meta_users_settings
 from shared.logger import ignore_exception
-from shared.mongodbconn import CLIENT, get_it_fs
+from shared.mongodbconn import CLIENT, get_it_fs, ensure_indexes, put_artifact, get_artifact, open_artifact, get_task_logs
+from shared.artifacts import ARTIFACT_NAMES, table_field, preview_jpeg
 from shared.retention import cleanup_expired_analyses
 from shared.apikeys import create_api_key, authenticate_api_key, revoke_api_key
+from shared.security import load_session_secret, login_attempt, validate_timeouts
+from shared.lifecycle import task_status, TERMINAL
 
 SWITCHES = [
     ('use_proxy', 'use Tor'),
@@ -70,7 +73,8 @@ USERAGENTS = [
 ]
 
 APP = Flask(__name__)
-APP.secret_key = json_settings[environ["project_env"]]["backend_key"]
+APP.secret_key = load_session_secret()
+APP.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
 APP.config['MONGODB_SETTINGS'] = json_settings[environ["project_env"]]["web_mongo"]
 APP.config['SESSION_COOKIE_SAMESITE'] = "Lax"
 ANALYZER_TIMEOUT = json_settings[environ["project_env"]]["analyzer_timeout"]
@@ -80,9 +84,9 @@ CELERY = Celery(json_settings[environ["project_env"]]["celery_settings"]["name"]
                 broker=json_settings[environ["project_env"]]["celery_settings"]["celery_broker_url"],
                 backend=json_settings[environ["project_env"]]["celery_settings"]["celery_result_backend"])
 
-CELERY.control.purge()
 MONGO_DB = MongoEngine()
 MONGO_DB.init_app(APP)
+ensure_indexes()
 BCRYPT = Bcrypt(APP)
 LOGIN_MANAGER = LoginManager()
 LOGIN_MANAGER.setup_app(APP)
@@ -152,13 +156,15 @@ class LoginForm(form.Form):
     '''
     login form (username and password)
     '''
-    login = fields.StringField(render_kw={"placeholder": "Username", "autocomplete": "off"})
-    password = fields.PasswordField(render_kw={"placeholder": "Password", "autocomplete": "off"})
+    login = fields.StringField(validators=[validators.InputRequired(), validators.Length(max=80)], render_kw={"placeholder": "Username", "autocomplete": "off"})
+    password = fields.PasswordField(validators=[validators.InputRequired()], render_kw={"placeholder": "Password", "autocomplete": "off"})
 
     def validate_login(self, field):
         '''
         log in
         '''
+        if not self.password.data:
+            raise validators.ValidationError('Password required')
         user = self.get_user()  # fix AttributeError: 'NoneType' object has no attribute 'password'
         if user is not None:
             if not BCRYPT.check_password_hash(user.password, self.password.data):
@@ -212,10 +218,22 @@ class CustomAdminIndexView(AdminIndexView):
         login route
         '''
         temp_form = LoginForm(request.form)
+        if request.method == 'POST':
+            attempts = CLIENT[defaultdb['dbname']]['login_attempts']
+            allowed, retry_after, account_bucket = login_attempt(
+                attempts, temp_form.login.data or '', request.remote_addr or 'unknown')
+            if not allowed:
+                flash(f'Too many login attempts. Try again in {retry_after} seconds.', 'error')
+                self._template_args.update(form=temp_form, active='Login', intro='', link='')
+                response = APP.make_response(super(CustomAdminIndexView, self).index())
+                response.status_code = 429
+                response.headers['Retry-After'] = str(retry_after)
+                return response
         if request.method == 'POST' and temp_form.validate():
             user = temp_form.get_user()
             if user is not None:
                 login_user(user)
+                attempts.delete_one({'_id': account_bucket})
 
         if current_user.is_authenticated:
             session["navs"] = []
@@ -327,6 +345,9 @@ class CustomViewBufferForm(BaseView):
         '''
         temp_form = BufferForm(request.form)
         if request.method == 'POST':
+            if not temp_form.validate():
+                flash('Invalid analysis options.', 'error')
+                return self.render('upload.html', header='New Analysis', form=temp_form, switches_details=''), 400
             if temp_form.buffer.data != "":
                 good_url = False
                 try:
@@ -423,17 +444,14 @@ def get_queue_tasks(limit=100):
         return tasks
     with ignore_exception(Exception):
         cursor = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find(
-            {"owner_id": owner_id}).sort([("start", -1)]).limit(limit)
+            {"owner_id": owner_id}, {'task': 1, 'buffer': 1, 'domain': 1, 'type': 1,
+                                     'start': 1, 'end': 1, 'status': 1, 'has_logs': 1, 'logs': {'$slice': 1}}
+        ).sort([("start", -1)]).limit(limit)
         for item in cursor:
             start = item.get("start")
             end = item.get("end")
             logs = item.get("logs") or []
-            if end:
-                status = "completed"
-            elif logs:
-                status = "running"
-            else:
-                status = "queued"
+            status = task_status(item)
             tasks.append({
                 "task": item.get("task", ""),
                 "target": item.get("buffer", "") or item.get("domain", "") or "—",
@@ -453,7 +471,7 @@ def get_queue_kpis(tasks):
         "total": len(tasks),
         "running": sum(1 for t in tasks if t["status"] == "running"),
         "queued": sum(1 for t in tasks if t["status"] == "queued"),
-        "completed": sum(1 for t in tasks if t["status"] == "completed"),
+        "completed": sum(1 for t in tasks if t["status"] in TERMINAL),
     }
 
 
@@ -563,7 +581,7 @@ class CustomTaskLogView(BaseView):
             item = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one({"task": task_id})
             if item:
                 target = item.get("buffer") or item.get("domain") or task_id
-                logs = item.get("logs") or []
+                logs = get_task_logs(defaultdb['dbname'], task_id, request_owner_id(), item.get('logs') or [])
         return self.render("tasklog.html", task_id=task_id, target=target, logs=logs)
 
 
@@ -590,10 +608,31 @@ def get_last_logs(json):
     owner_id = request_owner_id()
     if not owner_id:
         return {'id': 0, 'logs': ''}
-    docs = list(CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find(
-        {"owner_id": owner_id}).sort([("start", -1)]).limit(100))
-    lines = [line for doc in reversed(docs) for line in (doc.get('logs') or [])]
-    return {"id": len(lines), "logs": "\n".join(lines)}
+    cursor = json.get('id', 0)
+    initial = cursor in (0, '0', 'legacy')
+    query = {'owner_id': owner_id}
+    if not initial:
+        try:
+            query['_id'] = {'$gt': ObjectId(cursor)}
+        except Exception:
+            raise ValueError('Invalid log cursor')
+    collection = CLIENT[defaultdb['dbname']][defaultdb['loglinescoll']]
+    records = list(collection.find(query, {'message': 1}).sort('_id', -1 if initial else 1).limit(201))
+    more = len(records) > 200 and not initial
+    if initial:
+        records = list(reversed(records[:200]))
+    else:
+        records = records[:200]
+    if records:
+        return {'id': str(records[-1]['_id']), 'logs': '\n'.join(row['message'] for row in records),
+                'reset': cursor in (0, '0'), 'has_more': more}
+    if cursor in (0, '0'):
+        # A bounded snapshot preserves access to old embedded logs, once per page.
+        docs = list(CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].find(
+            {'owner_id': owner_id}, {'task': 1, 'start': 1, 'logs': {'$slice': -20}}).sort('start', -1).limit(10))
+        lines = [line for doc in reversed(docs) for line in (doc.get('logs') or [])][-200:]
+        return {'id': 'legacy', 'logs': '\n'.join(lines), 'reset': True, 'has_more': False}
+    return {'id': cursor, 'logs': '', 'reset': False, 'has_more': False}
 
 
 class CustomLogsView(BaseView):
@@ -612,7 +651,10 @@ class CustomLogsView(BaseView):
         elif request.method == 'POST':
             if request.json:
                 json_content = request.get_json(silent=True)
-                return dumps(get_last_logs(json_content))
+                try:
+                    return jsonify(get_last_logs(json_content))
+                except (ValueError, AttributeError):
+                    return jsonify(error='Invalid log cursor'), 400
         return jsonify({"Error": "Something wrong"})
 
     def is_accessible(self):
@@ -674,33 +716,35 @@ class CheckTask(BaseView):
 
 def update_gridfs_report(task_id, new_screenshot_base64, new_full_screenshot_base64=None):
     try:
-        report_doc = CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].find_one({"task": task_id, "type": "text/html"})
-        if report_doc:
-            old_file_id = report_doc["file"]
-            html_content = get_it_fs(defaultdb["dbname"], {"_id": old_file_id})
-            if html_content:
-                soup = BeautifulSoup(html_content, 'html.parser')
-                
-                # Update normal viewport screenshot
-                tbody = soup.find('tbody', class_='table-Screenshot')
-                if tbody:
-                    img = tbody.find('img', class_='fullsize')
-                    if img:
-                        img['src'] = "data:image/jpeg;base64, " + new_screenshot_base64
-                        
-                # Update full page screenshot if it is provided
-                if new_full_screenshot_base64:
-                    full_tbody = soup.find('tbody', class_='table-Full_Screenshot')
-                    if full_tbody:
-                        full_img = full_tbody.find('img', class_='fullsize')
-                        if full_img:
-                            full_img['src'] = "data:image/jpeg;base64, " + new_full_screenshot_base64
-                        
-                from gridfs import GridFS
-                fs = GridFS(CLIENT[defaultdb["dbname"]])
-                fs.delete(old_file_id)
-                new_file_id = fs.put(str(soup).encode('utf-8'), filename=task_id, task=task_id, content_type="text/html")
-                CLIENT[defaultdb["dbname"]][defaultdb["reportscoll"]].update_one({"_id": report_doc["_id"]}, {"$set": {"file": new_file_id}})
+        from base64 import b64decode
+        payload = b64decode(new_screenshot_base64, validate=True)
+        put_artifact(defaultdb['dbname'], task_id, 'normal_image', payload, 'image/png')
+        try:
+            put_artifact(defaultdb['dbname'], task_id, 'ai_image_jpeg', preview_jpeg(payload), 'image/jpeg')
+        except Exception:
+            pass
+        if new_full_screenshot_base64:
+            put_artifact(defaultdb['dbname'], task_id, 'full_image',
+                         b64decode(new_full_screenshot_base64, validate=True), 'image/png')
+        # New reports already reference these endpoints; do not parse/rewrite HTML.
+        collection = CLIENT[defaultdb['dbname']][defaultdb['reportscoll']]
+        report = collection.find_one({'task': task_id, 'type': 'text/html'},
+                                     {'file': 1, 'artifact_references': 1})
+        if report and not report.get('artifact_references'):
+            # Convert an old inline report once, then future updates only replace binaries.
+            html = get_it_fs(defaultdb['dbname'], {'_id': report['file']})
+            soup = BeautifulSoup(html, 'html.parser')
+            for css, kind in [('table-Screenshot', 'normal_image'), ('table-Full_Screenshot', 'full_image')]:
+                table = soup.find('tbody', class_=css)
+                image = table.find('img', class_='fullsize') if table else None
+                if image and (kind == 'normal_image' or new_full_screenshot_base64):
+                    image['src'] = f'/api/v1/tasks/{task_id}/images/{kind}'
+            from gridfs import GridFS
+            fs = GridFS(CLIENT[defaultdb['dbname']])
+            file_id = fs.put(str(soup).encode(), task=task_id, content_type='text/html')
+            collection.update_one({'_id': report['_id']}, {'$set': {
+                'file': file_id, 'artifact_references': True}})
+            fs.delete(report['file'])
     except Exception as e:
         print(f"Error updating GridFS report: {e}", flush=True)
 
@@ -724,15 +768,15 @@ def live_interact(task_id):
         client.connect(socket_path)
         client.sendall(json.dumps(json_content).encode('utf-8'))
         
-        response_data = b""
+        response_chunks = []
         while True:
             chunk = client.recv(4096)
             if not chunk:
                 break
-            response_data += chunk
+            response_chunks.append(chunk)
         client.close()
         
-        res = json.loads(response_data.decode('utf-8'))
+        res = json.loads(b''.join(response_chunks).decode('utf-8'))
         if res.get('status') == 'ok':
             new_screenshot = res.get('screenshot')
             new_full_screenshot = res.get('full_screenshot')
@@ -860,21 +904,29 @@ def owned_task(task_id):
             return None
     except (ValueError, AttributeError):
         return None
-    return CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].find_one(
-        {'task': task_id, 'owner_id': owner_id})
+    if getattr(g, 'task_doc', {}).get('task') == task_id:
+        return g.task_doc
+    item = CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].find_one(
+        {'task': task_id, 'owner_id': owner_id},
+        {'task': 1, 'owner_id': 1, 'start': 1, 'end': 1, 'buffer': 1, 'domain': 1,
+         'has_logs': 1, 'status': 1, 'error': 1, 'logs': {'$slice': 1}})
+    if item:
+        g.task_doc = item
+    return item
 
 
 def enqueue_owned_task(result):
     # Persist ownership before dispatch: status/authorization must work while queued.
     tasks = CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']]
-    tasks.insert_one(dict(result, start=datetime.utcnow(), end=None, logs=[]))
+    tasks.insert_one(dict(result, start=datetime.utcnow(), end=None, logs=[], status='queued'))
     try:
         return CELERY.send_task(json_settings[environ['project_env']]['worker']['name'],
-                                args=[result],
+                                args=[result], task_id=result['task'],
                                 queue=json_settings[environ['project_env']]['worker']['queue'])
     except Exception:
         tasks.update_one({'task': result['task'], 'owner_id': result['owner_id']},
-                         {'$set': {'dispatch_failed': True}})
+                         {'$set': {'dispatch_failed': True, 'status': 'failed',
+                                   'end': datetime.utcnow(), 'error': 'Queue dispatch failed'}})
         raise
 
 
@@ -934,6 +986,14 @@ def api_analyze():
         return jsonify(error="Unauthorized. Provide valid X-API-Key or Bearer token."), 401
 
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error='Expected a JSON object'), 400
+    try:
+        timeouts = validate_timeouts(data)
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    if not isinstance(data.get('url', data.get('buffer', '')), str):
+        return jsonify(error='URL must be a string'), 400
     url = (data.get("url") or data.get("buffer") or "").strip()
     if not url:
         return jsonify(error="Missing required 'url' parameter."), 400
@@ -957,9 +1017,7 @@ def api_analyze():
         "interactive": bool(data.get("interactive", False)),
         "record_vnc": bool(data.get("record_vnc", False)),
         "block_cookies": bool(data.get("block_cookies", True)),
-        "url_timeout": int(data.get("url_timeout", 10)),
-        "analyzer_timeout": int(data.get("analyzer_timeout", 60)),
-        "interactive_timeout": int(data.get("interactive_timeout", 300)),
+        **timeouts,
         "useragent": data.get("useragent", "Chrome"),
         "useragent_mapped": SWITCHES_MAPPED.get(data.get("useragent", "Chrome"), SWITCHES_MAPPED['Chrome'])
     }
@@ -984,7 +1042,7 @@ def api_task_status(task_id):
     if not check_api_auth():
         return jsonify(error="Unauthorized."), 401
 
-    item = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one({"task": task_id})
+    item = owned_task(task_id)
     if not item:
         return jsonify(error=f"Task '{task_id}' not found."), 404
 
@@ -992,17 +1050,13 @@ def api_task_status(task_id):
     end = item.get("end")
     logs = item.get("logs") or []
 
-    if end:
-        status = "completed"
-    elif logs:
-        status = "running"
-    else:
-        status = "queued"
+    status = task_status(item)
 
     return jsonify({
         "task_id": task_id,
         "target_url": item.get("buffer", ""),
         "status": status,
+        "error": item.get('error'),
         "submitted_at": start.isoformat() + "Z" if start else None,
         "completed_at": end.isoformat() + "Z" if end else None,
         "duration": _format_duration(start, end)
@@ -1015,14 +1069,19 @@ def api_task_summary(task_id):
     if not check_api_auth():
         return jsonify(error="Unauthorized."), 401
 
-    task_doc = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one({"task": task_id})
+    task_doc = owned_task(task_id)
     if not task_doc:
         return jsonify(error=f"Task '{task_id}' not found."), 404
+
+    state = task_status(task_doc)
+    if state in TERMINAL and state != 'completed':
+        return jsonify(task_id=task_id, status=state,
+                       error=task_doc.get('error') or 'Analysis did not complete successfully'), 422
 
     if not task_doc.get("end"):
         return jsonify({
             "task_id": task_id,
-            "status": "running" if task_doc.get("logs") else "queued",
+            "status": "running" if task_doc.get('has_logs') or task_doc.get("logs") else "queued",
             "message": "Analysis is still in progress. Check back shortly."
         }), 202
 
@@ -1031,7 +1090,8 @@ def api_task_summary(task_id):
     if ai_raw:
         if isinstance(ai_raw, bytes):
             ai_raw = ai_raw.decode('utf-8', 'ignore')
-        return APP.response_class(ai_raw, mimetype='application/json'), 200
+        summary = json.loads(ai_raw)
+        return summary_response(task_id, summary)
 
     raw_analyzer = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json"})
     if not raw_analyzer:
@@ -1041,17 +1101,9 @@ def api_task_summary(task_id):
         if isinstance(raw_analyzer, bytes):
             raw_analyzer = raw_analyzer.decode('utf-8', 'ignore')
         parsed_analyzer = json.loads(raw_analyzer)
-        extracted = parsed_analyzer.get("extracted_table", {})
-        heuristics = extracted.get("ai_heuristics", {})
-        cert = extracted.get("Certificate", {})
-        dns = extracted.get("dns_records", [])
-
-        normal_img = parsed_analyzer.get("screenshot_table", {}).get("normal_image", "")
-        img_b64 = ""
-        if normal_img:
-            from binascii import unhexlify
-            from base64 import b64encode
-            img_b64 = f"data:image/jpeg;base64,{b64encode(unhexlify(normal_img.encode('utf-8'))).decode('utf-8')}"
+        heuristics = table_field(parsed_analyzer, 'extracted_table', 'ai_heuristics', {})
+        cert = table_field(parsed_analyzer, 'extracted_table', 'Certificate', {})
+        dns = table_field(parsed_analyzer, 'extracted_table', 'dns_records', [])
 
         fallback_summary = {
             "task_id": task_id,
@@ -1083,10 +1135,9 @@ def api_task_summary(task_id):
             },
             "dns_records": dns,
             "threat_indicators": heuristics.get("threat_indicators", []),
-            "screenshot_base64": img_b64,
             "screenshot_url": f"/api/v1/tasks/{task_id}/screenshot"
         }
-        return jsonify(fallback_summary), 200
+        return summary_response(task_id, fallback_summary, parsed_analyzer)
     except Exception as ex:
         return jsonify(error=f"Error compiling summary: {str(ex)}"), 500
 
@@ -1097,27 +1148,79 @@ def api_task_screenshot(task_id):
     if not check_api_auth():
         return jsonify(error="Unauthorized."), 401
 
-    import json
-    from binascii import unhexlify
-    from flask import Response
-
-    raw_analyzer = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json"})
-    if raw_analyzer:
-        try:
-            if isinstance(raw_analyzer, bytes):
-                raw_analyzer = raw_analyzer.decode('utf-8', 'ignore')
-            data = json.loads(raw_analyzer)
-            screenshots = data.get("screenshot_table", {})
-            ai_jpeg = screenshots.get("ai_image_jpeg")
-            if ai_jpeg:
-                return Response(unhexlify(ai_jpeg.encode('utf-8')), mimetype="image/jpeg")
-            normal = screenshots.get("normal_image")
-            if normal:
-                return Response(unhexlify(normal.encode('utf-8')), mimetype="image/png")
-        except Exception:
-            pass
-
+    for kind in ('ai_image_jpeg', 'normal_image'):
+        artifact = open_artifact(defaultdb['dbname'], task_id, kind)
+        if artifact:
+            return image_response(task_id, kind, artifact)
+    image = task_image(task_id)
+    if image:
+        payload, mime = image
+        return Response(payload, mimetype=mime)
     return jsonify(error=f"Screenshot not found for task '{task_id}'."), 404
+
+
+def task_image(task_id, kind=None, analysis=None):
+    kinds = (kind,) if kind else ('ai_image_jpeg', 'normal_image')
+    for selected in kinds:
+        image = get_artifact(defaultdb['dbname'], task_id, selected)
+        if image:
+            return image
+    # Compatibility for existing inline reports; no filesystem path from JSON is opened.
+    if analysis is None:
+        import json
+        raw = get_it_fs(defaultdb['dbname'], {'task': task_id, 'contentType': 'application/json'})
+        if not raw:
+            return None
+        analysis = json.loads(raw)
+    from binascii import unhexlify
+    for selected in kinds:
+        table = 'network_table' if selected == 'circular_layout' else 'screenshot_table'
+        value = table_field(analysis, table, selected)
+        if isinstance(value, str) and value:
+            return unhexlify(value.encode()), ARTIFACT_NAMES[selected][1]
+    return None
+
+
+def summary_response(task_id, summary, analysis=None):
+    if request.args.get('include_screenshot', 'true').lower() in ('false', '0', 'no'):
+        summary.pop('screenshot_base64', None)
+    else:
+        current = get_artifact(defaultdb['dbname'], task_id, 'ai_image_jpeg') or get_artifact(defaultdb['dbname'], task_id, 'normal_image')
+        if current or not summary.get('screenshot_base64'):
+            from base64 import b64encode
+            image = current or task_image(task_id, analysis=analysis)
+            summary['screenshot_base64'] = (
+                f'data:{image[1]};base64,{b64encode(image[0]).decode()}' if image else '')
+    return jsonify(summary), 200
+
+
+def image_response(task_id, kind, artifact=None):
+    artifact = artifact or open_artifact(defaultdb['dbname'], task_id, kind)
+    if artifact:
+        file, metadata = artifact
+        def chunks():
+            while True:
+                chunk = file.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        response = Response(chunks(), mimetype=metadata['content_type'])
+        response.content_length = file.length
+        response.set_etag(metadata['sha256'])
+        response.headers['Cache-Control'] = 'private, no-cache'
+        return response.make_conditional(request)
+    image = task_image(task_id, kind)
+    if image:
+        return Response(image[0], mimetype=image[1])
+    return jsonify(error='Image not found'), 404
+
+
+@APP.route('/api/v1/tasks/<task_id>/images/<kind>', methods=['GET'])
+@CSRF.exempt
+def api_task_image(task_id, kind):
+    if kind not in ARTIFACT_NAMES:
+        return jsonify(error='Image not found'), 404
+    return image_response(task_id, kind)
 
 
 class CustomMenuLink(MenuLink):

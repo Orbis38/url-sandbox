@@ -3,16 +3,15 @@
     backend -> report
 '''
 
-from json import dumps
-from base64 import b64encode
+from json import dumps, loads
 from datetime import datetime
 from os import path
 from tinydb import TinyDB
-from binascii import unhexlify
 from jinja2 import Template, Environment, FileSystemLoader
 from shared.logger import log_string, ignore_exception
 from shared.settings import defaultdb
-from shared.mongodbconn import add_item_fs, find_item
+from shared.mongodbconn import add_item_fs, find_item, put_artifact, get_task_logs
+from shared.artifacts import ARTIFACT_NAMES, read_image
 
 
 def pretty_json(value):
@@ -146,8 +145,26 @@ def make_report(parsed):
     analyzer_db = TinyDB(analyzer_path)
     sniffer_db = TinyDB(sniffer_path)
 
+    # Store each image as a binary artifact. HTML and JSON only reference it.
+    for table_name in ('screenshot_table', 'network_table'):
+        for row in analyzer_db.table(table_name).all():
+            for kind, value in row.items():
+                if kind in ARTIFACT_NAMES:
+                    payload, mime = read_image(task_dir, kind, value)
+                    put_artifact(defaultdb['dbname'], parsed['task'], kind, payload, mime)
+
     with open(analyzer_path) as file:
-        temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], file.read(), parsed['task'], None, parsed['task'], "application/json", datetime.now())
+        analysis_data = loads(file.read())
+    # Old inline captures can still be processed without duplicating their bytes.
+    for table_name in ('screenshot_table', 'network_table'):
+        for row in analysis_data.get(table_name, {}).values():
+            if isinstance(row, dict):
+                for kind in list(row):
+                    if kind in ARTIFACT_NAMES:
+                        filename, mime = ARTIFACT_NAMES[kind]
+                        row[kind] = {'artifact': filename, 'content_type': mime,
+                                     'url': f"/api/v1/tasks/{parsed['task']}/images/{kind}"}
+    temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(analysis_data), parsed['task'], None, parsed['task'], "application/json", datetime.now())
 
     # Build & store AI-ready multimodal summary for Playbooks & local LLMs (Gemma)
     with ignore_exception(Exception):
@@ -165,21 +182,18 @@ def make_report(parsed):
         ai_img_item = screenshot_table.search(lambda x: x if 'ai_image_jpeg' in x else 0)
         normal_img_item = screenshot_table.search(lambda x: x if 'normal_image' in x else 0)
 
-        ai_jpeg_b64 = ""
-        if ai_img_item:
-            ai_jpeg_b64 = b64encode(unhexlify(ai_img_item[0]['ai_image_jpeg'].encode('utf-8'))).decode('utf-8')
-        elif normal_img_item:
+        if not ai_img_item and normal_img_item:
             try:
                 from PIL import Image
                 import io
-                raw_png = unhexlify(normal_img_item[0]['normal_image'].encode('utf-8'))
+                raw_png, _ = read_image(task_dir, 'normal_image', normal_img_item[0]['normal_image'])
                 img = Image.open(io.BytesIO(raw_png)).convert('RGB')
                 img.thumbnail((1280, 800), Image.Resampling.LANCZOS)
                 buf = io.BytesIO()
                 img.save(buf, format='JPEG', quality=82, optimize=True)
-                ai_jpeg_b64 = b64encode(buf.getvalue()).decode('utf-8')
+                put_artifact(defaultdb['dbname'], parsed['task'], 'ai_image_jpeg', buf.getvalue(), 'image/jpeg')
             except Exception:
-                ai_jpeg_b64 = b64encode(unhexlify(normal_img_item[0]['normal_image'].encode('utf-8'))).decode('utf-8')
+                pass
 
         ai_summary_dict = {
             "task_id": parsed['task'],
@@ -211,7 +225,6 @@ def make_report(parsed):
             },
             "dns_records": dns,
             "threat_indicators": heuristics.get('threat_indicators', []),
-            "screenshot_base64": f"data:image/jpeg;base64,{ai_jpeg_b64}" if ai_jpeg_b64 else "",
             "screenshot_url": f"/api/v1/tasks/{parsed['task']}/screenshot"
         }
         add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(ai_summary_dict), parsed['task'], None, parsed['task'], "application/json; type=ai_summary", datetime.now())
@@ -225,9 +238,7 @@ def make_report(parsed):
         screenshot_table = analyzer_db.table('screenshot_table')
         item = screenshot_table.search(lambda x: x if 'normal_image' in x else 0)
         if item:
-            bimage = b64encode(unhexlify(item[0]['normal_image'].encode('utf-8')))
-            img_base64 = "data:image/jpeg;base64, {}".format(bimage.decode("utf-8", errors="ignore"))
-            table += make_image_table_base64(ENV_JINJA2, img_base64, "Screenshot")
+            table += make_image_table_base64(ENV_JINJA2, f"/api/v1/tasks/{parsed['task']}/images/normal_image", "Screenshot")
             log_string("Parsed normal screenshot", task=parsed['task'])
 
     # Interactive scroll controls render directly under the screenshot.
@@ -238,18 +249,14 @@ def make_report(parsed):
         screenshot_table = analyzer_db.table('screenshot_table')
         item = screenshot_table.search(lambda x: x if 'full_image' in x else 0)
         if item:
-            bimage = b64encode(unhexlify(item[0]['full_image'].encode('utf-8')))
-            img_base64 = "data:image/jpeg;base64, {}".format(bimage.decode("utf-8", errors="ignore"))
-            table += make_image_table_base64(ENV_JINJA2, img_base64, "Full Screenshot")
+            table += make_image_table_base64(ENV_JINJA2, f"/api/v1/tasks/{parsed['task']}/images/full_image", "Full Screenshot")
             log_string("Parsed full screenshot", task=parsed['task'])
 
     with ignore_exception(Exception):
         network_table = analyzer_db.table('network_table')
         item = network_table.search(lambda x: x if 'circular_layout' in x else 0)
         if item:
-            bimage = b64encode(unhexlify(item[0]['circular_layout'].encode('utf-8')))
-            img_base64 = "data:image/jpeg;base64, {}".format(bimage.decode("utf-8", errors="ignore"))
-            table += make_image_table_base64(ENV_JINJA2, img_base64, "Network Graph")
+            table += make_image_table_base64(ENV_JINJA2, f"/api/v1/tasks/{parsed['task']}/images/circular_layout", "Network Graph")
             log_string("Parsed Network Graph", task=parsed['task'])
 
     with ignore_exception(Exception):
@@ -420,7 +427,7 @@ def make_report(parsed):
             <div class="up-interactive-header">
                 <div class="up-live-badge">
                     <span class="up-live-dot" id="live-indicator-dot"></span>
-                    <span id="live-status-title">Live Interactive Browser (30 FPS &bull; 1440&times;900)</span>
+                    <span id="live-status-title">Live Interactive Browser (30 FPS &bull; 1280&times;720)</span>
                     <span id="live-session-info" style="color: #94a3b8; font-weight: normal; font-size: 12px; margin-left: 6px;">
                         Direct navigation: scroll, click, and type in real time
                     </span>
@@ -607,6 +614,7 @@ def make_report(parsed):
 
     all_logs = find_item(defaultdb["dbname"], defaultdb["taskdblogscoll"], {'task': parsed['task']})
     if all_logs:
+        all_logs['logs'] = get_task_logs(defaultdb['dbname'], parsed['task'], parsed.get('owner_id'), all_logs.get('logs') or [])
         full_table = make_text_table(ENV_JINJA2, all_logs['logs'], "Logs")
         log_string("Adding logs", task=parsed['task'])
 
@@ -616,6 +624,7 @@ def make_report(parsed):
 
     with open("template.html") as file:
         rendered = Template(file.read()).render(title=parsed['task'], content=full_table)
-        temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], rendered, parsed['task'], None, parsed['task'], "text/html", datetime.now())
+        temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], rendered, parsed['task'],
+                              {'artifact_references': True}, parsed['task'], "text/html", datetime.now())
 
     temp_id = add_item_fs(defaultdb["dbname"], defaultdb["taskfileslogscoll"], "\n".join(all_logs['logs']), "log", None, parsed['task'], "text/plain", datetime.now())

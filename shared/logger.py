@@ -8,6 +8,8 @@ from datetime import datetime
 from contextlib import contextmanager
 from shared.settings import defaultdb
 from shared.mongodbconn import CLIENT, add_item, update_task, update_task_by_uuid
+from pymongo import ReturnDocument
+from uuid import uuid4
 
 
 @contextmanager
@@ -26,18 +28,23 @@ def setup_task_logger(parsed):
     setup the dynamic logger for the task
     '''
     log_string("Setup task {} logger".format(parsed['task']), "Yellow")
-    temp_dict = parsed.copy()
-    temp_dict.update({"start": datetime.utcnow(), "end": None, "logs": []})
-    CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].update_one(
-        {'task': parsed['task']}, {'$setOnInsert': temp_dict}, upsert=True)
+    collection = CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']]
+    claimed = collection.find_one_and_update(
+        {'task': parsed['task'], 'owner_id': parsed.get('owner_id'), 'end': None,
+         '$or': [{'status': 'queued'}, {'status': {'$exists': False}, 'has_logs': {'$ne': True}, 'logs': []}]},
+        {'$set': {'status': 'running', 'started_at': datetime.utcnow(), 'execution_id': str(uuid4())}},
+        return_document=ReturnDocument.AFTER)
+    return claimed is not None
 
 
-def cancel_task_logger(task):
+def cancel_task_logger(task, status='completed', error=None):
     '''
     setup the dynamic logger for the task
     '''
     log_string("Closing task {} logger".format(task), "Yellow")
-    update_task_by_uuid(defaultdb["dbname"], defaultdb["taskdblogscoll"], task, {"end": datetime.utcnow()})
+    CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].update_one(
+        {'task': task, 'status': 'running'},
+        {'$set': {'end': datetime.utcnow(), 'status': status, 'error': error}})
 
 
 def log_string(_str, color=None, task=None):

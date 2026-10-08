@@ -29,7 +29,7 @@ UrlProbe spins up ephemeral browser sandboxes equipped with anti-bot evasion tec
 ## Key Capabilities
 
 - **🛡️ Isolated Disposable Sandboxes**: Every analysis runs inside an isolated, disposable container running Debian, Xvfb, and Chromium 131 with anti-bot fingerprint masking, permission prompt suppression, and viewport emulation.
-- **🖥️ Multi-Session 30 FPS Interactive VNC**: Direct, real-time control of the sandboxed browser via Openbox, x11vnc, and noVNC (1440×900 at 30 FPS). Click through multi-stage phishing funnels, bypass CAPTCHAs, or trigger dynamic malware scripts. Supports **up to 5 concurrent live sessions** with dedicated port isolation.
+- **🖥️ Multi-Session 30 FPS Interactive VNC**: Direct, real-time control of the sandboxed browser via Openbox, x11vnc, and noVNC (1280×720 at 30 FPS). Click through multi-stage phishing funnels, bypass CAPTCHAs, or trigger dynamic malware scripts. Supports **up to 5 concurrent live sessions** with dedicated port isolation. Non-interactive analyses retain a 1440×900 browser window.
 - **🎥 MP4 Video Session Recording**: Optional lightweight FFmpeg recording of the interactive X11 display. Captures the entire user navigation session into standard H.264 MP4 format, viewable directly within the report via an embedded video player or downloadable for forensic auditing.
 - **📸 Flexible Screenshot Controls**: Independent options for standard viewport screenshots and full-page scrolling screenshots. Completely disabled when deselected.
 - **🧅 Dedicated Tor Gateway & Instant IP Rotation**: Traffic can be routed through an isolated Tor container with remote DNS resolution (SOCKS5h) and active bootstrap synchronization. Executes `SIGNAL NEWNYM` via the Tor ControlPort before every run to guarantee a fresh exit node.
@@ -93,7 +93,7 @@ UrlProbe consists of five decoupled services connected through private internal 
             │        Disposable Sandboxes (Up to 5 Concurrent)            │
             │  ┌───────────────────────────────────────────────────────┐  │
             │  │ Sandbox Container: `url-sandbox_box_<task_id>`        │  │
-            │  │  - Xvfb Virtual Framebuffer (1440x900)                │  │
+            │  │  - Xvfb Virtual Framebuffer (1280x720)                │  │
             │  │  - Openbox Window Manager                             │  │
             │  │  - Chromium 131 Stealth Webdriver                     │  │
             │  │  - x11vnc (5900) -> Websockify (Host Port: 6080-6100) │  │
@@ -266,6 +266,8 @@ POST /api/v1/analyze
 ```bash
 GET /api/v1/tasks/<task_id>/summary
 ```
+
+For compatibility, this response includes `screenshot_base64` as a `data:image/...;base64,...` URL by default. The image is encoded when the API response is requested; it is not duplicated inside the stored summary. Clients that only need metadata can request `GET /api/v1/tasks/<task_id>/summary?include_screenshot=false`, which omits the base64 field and keeps the authenticated `screenshot_url`.
 **Response (200 OK):**
 ```json
 {
@@ -291,7 +293,9 @@ GET /api/v1/tasks/<task_id>/summary
 ```bash
 GET /api/v1/tasks/<task_id>/screenshot
 ```
-Returns `image/jpeg` containing the rendered target viewport.
+Returns the AI-sized `image/jpeg` preview, or the original `image/png` when no preview is available. The preview retains the existing JPEG size/quality settings. For original-resolution images use `GET /api/v1/tasks/<task_id>/images/normal_image` or `/images/full_image`; `/images/circular_layout` returns the network graph. All image routes require the same user/session or API-key authorization as the task. Binary responses support private ETag revalidation.
+
+New raw JSON reports contain small image descriptors with `artifact`, `content_type` and authenticated `url` fields instead of inline hexadecimal image bytes. Existing inline reports remain readable. HTML reports load binary images through the authenticated endpoints.
 
 ### 4. Stream or Download Recorded Session Video
 ```bash
@@ -375,10 +379,36 @@ sudo docker compose -f docker-compose-dev.yml logs -f workers_api
 
 1. **Firewall Ingress**: In production, restrict ports `27017` (MongoDB) and `6379` (Redis) to the local Docker network. Do not expose database ports to public interfaces.
 2. **Reverse Proxy & HTTPS**: Deploy an Nginx, Caddy, or Traefik reverse proxy in front of port `8000` with valid TLS certificates (Let's Encrypt).
-3. **Secret Keys**: Rotate the session-signing `backend_key`, Redis password and MongoDB credentials before analyzing untrusted links in live SOC environments. Create per-user API keys from the sidebar.
+3. **Secret Keys**: The session key is installation-specific and loaded from the private `.secrets/flask-session.key` file. Run `python3 scripts/init_session_secret.py` once before using Compose directly; `run.sh` initializes it automatically and never replaces an existing key. Back up this private file outside Git. `URL_SANDBOX_SESSION_SECRET` or `URL_SANDBOX_SESSION_SECRET_FILE` can override it. Startup fails if the key is absent/too short. MongoDB and Redis credentials still need rotation and least-privilege configuration. Create per-user API keys from the sidebar.
 4. **Sandbox Network Isolation**: The disposable `box` container uses the `url-sandbox_frontend_box` bridge. Browser and Requests traffic uses Tor when `use_proxy` is enabled, but this is not an egress firewall; apply network policies to block private and metadata destinations.
 
 See [SECURITY_ASSESSMENT.md](SECURITY_ASSESSMENT.md) for reproduced findings, remaining risks and test commands.
+
+## Restart behavior and housekeeping
+
+- MongoDB and Redis host ports bind only to `127.0.0.1`. Container-to-container connections continue to use their Docker service names. Remote administrative connections now require a secure tunnel or equivalent access control.
+- The frontend never purges the broker queue. Redis uses a named data volume and AOF (`appendfsync everysec`) for queued messages. This is not an exactly-once guarantee under crashes; up to the latest second of Redis writes may be lost.
+- A task must exist in MongoDB and be unstarted before the worker can claim it atomically. Started, finished, interrupted, cancelled or deleted tasks are not rerun by broker redelivery. There is no retry/recovery of interrupted browser or VNC sessions. Submit a new analysis manually if needed.
+- API status can be `queued`, `running`, `completed`, `failed`, `timed_out`, `interrupted` or `cancelled`. Failed/interrupted summaries return HTTP 422; clients should handle these terminal states. The dashboard shows error badges and retained logs/reports.
+- `maintenance` checks every minute. It removes only stopped project boxes (after a 30-second grace period), never running ones. An unfinished running task becomes `interrupted` after the worker's maximum execution time plus 60 seconds (currently roughly 6–7 minutes including the scan interval). Queued tasks are left intact. Hourly retention removes artifacts older than 60 days, including old flat log files; accounts and API keys are retained.
+- Login allows 10 attempts per account and 30 per source address per 15-minute fixed window. A successful login resets the account counter; excessive attempts return HTTP 429 and `Retry-After`. Forwarded IP headers are not trusted. Behind a reverse proxy, configure trusted proxy handling explicitly before relying on distinct client addresses.
+- API timeout ranges are integers: URL 1–60 seconds, analysis 1–120 seconds, interactive 1–900 seconds. Existing UI choices/defaults are unchanged. Invalid values return HTTP 400 before creating a job; request bodies are limited to 1 MiB.
+
+The first session-key rotation requires users to sign in again; subsequent restarts retain valid sessions and API keys. `RUN_LIVE_HARDENING_TESTS=1 python tests/live_hardening_smoke.py` explicitly checks loopback ports, AOF, timeout validation, pending-queue/session/API-key preservation across a frontend restart and rejection of cookies signed with the old public key. It pauses only an idle worker and cancels/removes its own test task before releasing it.
+
+See [SECURITY_REMAINING.md](SECURITY_REMAINING.md) for current residual risks and the operational effect of further fixes.
+
+## Analysis performance
+
+- Network events are inserted into TinyDB in a single batch. Packet capture batches its writes, flushes the final batch on graceful shutdown and disables Scapy's redundant in-memory packet storage.
+- PNG/JPEG artifacts live outside TinyDB JSON and are published once per content version to GridFS. Stored reports and summaries reference those artifacts; live screenshot updates replace binaries instead of rewriting the entire HTML report.
+- DNS record lookups run concurrently with a five-second per-query lifetime. Header/certificate inspection shares a streamed GET request and closes it without downloading the final page body. Browser navigation remains a separate request.
+- Task listings/status use projected fields and dedicated indexes. New logs are separate owner-scoped records, leaving task documents small. Active Logs initially shows up to 200 recent lines, then retrieves bounded cursor-based deltas. The visible log buffer retains 2,000 lines; the per-task Logs page still provides the complete retained history, including legacy embedded logs.
+- Queue/log polling pauses in hidden tabs, slows when idle and schedules the next request after the current one completes.
+
+Rebuild website, worker and box together before producing new-format captures. These changes do not alter VNC compression, frame rate, session limits or the previously selected resolutions. Index creation is idempotent at startup; the task index remains non-unique to accommodate existing duplicate legacy records.
+
+For an explicit end-to-end check against the running local stack, run `RUN_LIVE_STACK_TESTS=1 python tests/live_stack_smoke.py` from a test environment with Docker SDK, Requests, BeautifulSoup, Pillow and websocket-client installed. This creates and removes two temporary accounts, keys, analyses and a local HTTP fixture. It verifies actual Chromium screenshots (including a full page), API image/base64 compatibility, user isolation, VNC authentication and 1280×720 desktop/video, key revocation, and default Tor navigation to example.com. Docker access is required; this script is excluded from automatic pytest discovery.
 
 ---
 

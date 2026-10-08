@@ -6,7 +6,7 @@
    <td>{{ t.submitted }}</td>
    <td>{{ t.duration }}</td>
    <td class="up-row-actions">
-      {% if t.status == 'completed' %}
+      {% if t.status in ['completed', 'failed', 'timed_out', 'interrupted'] %}
       <a class="up-link" href="/report/{{ t.task }}" target="_blank">Report</a>
       <a class="up-link" href="/report/{{ t.task }}/json" target="_blank">JSON</a>
       {% endif %}

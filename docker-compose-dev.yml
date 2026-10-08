@@ -11,11 +11,13 @@ services:
       - mongodb
     environment:
       - project_env=docker
+      - URL_SANDBOX_SESSION_SECRET_FILE=/run/secrets/flask_session_key
     networks:
       - frontend
       - backend
     volumes:
       - ./shared:/website/shared:z
+      - ./.secrets/flask-session.key:/run/secrets/flask_session_key:ro
       - /etc/localtime:/etc/localtime:ro
       - url-sandbox_output:/tmp/urlsandbox/output:z
     healthcheck:
@@ -24,6 +26,7 @@ services:
       driver: none
 
   workers_api:
+    image: url-sandbox-workers_api
     build:
       context: .
       dockerfile: ./backend-Dockerfile
@@ -58,6 +61,23 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - tor_data:/var/lib/tor
 
+  maintenance:
+    image: url-sandbox-workers_api
+    command: python maintenance.py
+    restart: unless-stopped
+    security_opt:
+      - label=disable
+    environment:
+      - project_env=docker
+    depends_on:
+      - mongodb
+    networks:
+      - backend
+    volumes:
+      - ./shared:/backend/shared
+      - url-sandbox_output:/tmp/urlsandbox/output/
+      - /var/run/docker.sock:/var/run/docker.sock
+
   box:
     build:
       context: .
@@ -73,12 +93,14 @@ services:
   redis:
     image: redis
     container_name: url-sandbox_redis
-    command: redis-server --requirepass changeme_927dhgs810d712fxs1
+    command: redis-server --appendonly yes --appendfsync everysec --requirepass changeme_927dhgs810d712fxs1
+    volumes:
+      - url-sandbox_redis_data:/data
     networks:
       - backend
       - frontend
     ports:
-     - "6379:6379"
+     - "127.0.0.1:6379:6379"
     logging:
       driver: none
 
@@ -87,7 +109,7 @@ services:
       context: .
       dockerfile: ./mongodb-Dockerfile
     ports:
-      - '27017:27017'
+      - '127.0.0.1:27017:27017'
     networks:
       - backend
       - frontend
@@ -111,6 +133,8 @@ networks:
     name: url-sandbox_frontend_box
 
 volumes:
+  url-sandbox_redis_data:
+    name: url-sandbox_redis_data
   tor_data:
     name: url-sandbox_tor_data
   url-sandbox_mongodb_data:

@@ -13,6 +13,7 @@ from assessment_helpers import ROOT
 
 def test_worker_mounts_only_task_directory_and_preserves_settings(env):
     from shared.logger import setup_task_logger, cancel_task_logger, log_string, ignore_exception
+    from shared.security import validate_timeouts
     web, db, alice, _, _ = env
     launched = []
     def missing(*args): raise KeyError('not found')
@@ -33,15 +34,18 @@ def test_worker_mounts_only_task_directory_and_preserves_settings(env):
         json_settings=web.json_settings, environ={'project_env': 'docker'}, path=os.path,
         makedirs=os.makedirs, UUID=UUID, textract=lambda _: SimpleNamespace(domain='example', suffix='com'),
         hexlify=hexlify, jdumps=json.dumps, make_report=lambda p: None,
-        release_vnc_port=lambda p: None, sleep=lambda s: None)
+        release_vnc_port=lambda p: None, sleep=lambda s: None, validate_timeouts=validate_timeouts)
     source = ast.parse((ROOT / 'backend/worker.py').read_text())
     node = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == 'analyze_url')
     node.decorator_list = []
     exec(compile(ast.Module(body=[node], type_ignores=[]), 'worker', 'exec'), namespace)
     tasks = [str(uuid4()), str(uuid4())]
     for task in tasks:
+        db.taskdblogs.insert_one({'task':task,'owner_id':str(alice.id),'status':'queued',
+                                 'start':datetime.utcnow(),'end':None,'logs':[]})
         namespace['analyze_url'](None, {'task': task, 'owner_id': str(alice.id), 'buffer': 'https://example.com',
             'interactive': False, 'use_proxy': False, 'analyzer_timeout': 30})
+    assert len(launched) == 2
     for task, launch in zip(tasks, launched):
         assert launch['volumes'] == {f'/host/artifacts/{task}': {'bind': f'/output/{task}', 'mode': 'rw'}}
     assert web.json_settings['docker']['task_logs']['box_output'] == '/output/'

@@ -3,13 +3,13 @@
     box -> sniffer
 '''
 
-from scapy.all import Ether, conf, get_if_hwaddr, sniff
-from sys import stdout
+from scapy.all import Ether, conf, get_if_hwaddr, AsyncSniffer
 from binascii import hexlify
 from netifaces import ifaddresses, AF_INET, AF_LINK
-from multiprocessing import Process
+from multiprocessing import Process, Event
 from datetime import datetime
 from json import JSONEncoder, dumps as jdumps, loads as jloads
+from threading import Lock, Event as ThreadEvent
 
 
 class ComplexEncoder(JSONEncoder):
@@ -35,6 +35,20 @@ class QSniffer():
         self.method = "ALL"
         self.task = parsed['task']
         self.logs = analyzer_db.table('sniffer_table')
+        self.pending = []
+        self.stop_event = Event()
+
+    def flush_packets(self):
+        with self.pending_lock:
+            packets, self.pending = self.pending, []
+        if packets:
+            self.logs.insert_multiple(packets)
+
+    def add_packet(self, packet):
+        with self.pending_lock:
+            self.pending.append(packet)
+            if len(self.pending) >= 128:
+                self.flush_event.set()
 
     def get_layers(self, packet):
         try:
@@ -47,6 +61,8 @@ class QSniffer():
 
     def scapy_sniffer_main(self):
         _q_s = self
+        self.pending_lock = Lock()
+        self.flush_event = ThreadEvent()
 
         def capture_logic(packet):
             hex_payloads, _fields = {}, {}
@@ -67,7 +83,7 @@ class QSniffer():
                                 except Exception as e:
                                     pass
                             dumped = jdumps({'type': 'received', 'time': datetime.now().isoformat(), 'ip': _q_s.current_ip, 'mac': _q_s.current_mac, 'layers': _layers, 'fields': _fields, "payload": hex_payloads}, cls=ComplexEncoder)
-                            _q_s.logs.insert(jloads(dumped))
+                            _q_s.add_packet(jloads(dumped))
                     if not received and packet.haslayer(Ether) and packet[Ether].src == get_if_hwaddr(conf.iface).lower():
                         for layer in _layers:
                             try:
@@ -77,13 +93,21 @@ class QSniffer():
                             except Exception as e:
                                 pass
                         dumped = jdumps({'type': 'sent', 'time': datetime.now().isoformat(), 'ip': _q_s.current_ip, 'mac': _q_s.current_mac, 'layers': _layers, 'fields': _fields, "payload": hex_payloads}, cls=ComplexEncoder)
-                        _q_s.logs.insert(jloads(dumped))
+                        _q_s.add_packet(jloads(dumped))
             except BaseException:
                 pass
 
-            stdout.flush()
-
-        sniff(filter=self.filter, iface=self.interface, prn=capture_logic)
+        capture = AsyncSniffer(filter=self.filter, iface=self.interface, prn=capture_logic, store=False)
+        capture.start()
+        try:
+            while not self.stop_event.is_set():
+                self.flush_event.wait(timeout=1)
+                self.flush_event.clear()
+                self.flush_packets()
+        finally:
+            if capture.running:
+                capture.stop()
+            self.flush_packets()
 
     def run_sniffer(self, process=False):
         if process:
@@ -94,5 +118,8 @@ class QSniffer():
 
     def kill_sniffer(self, process=False):
         if process:
-            self.sniffer.terminate()
-            self.sniffer.join()
+            self.stop_event.set()
+            self.sniffer.join(timeout=3)
+            if self.sniffer.is_alive():
+                self.sniffer.terminate()
+                self.sniffer.join()

@@ -184,11 +184,13 @@ wait_on_web_interface () {
 }
 
 test_project () {
+    python3 scripts/init_session_secret.py || return 1
 	ensure_docker
 	compose_cmd -f docker-compose-test.yml up --build
 }
 
 dev_project () {
+    python3 scripts/init_session_secret.py || return 1
 	ensure_docker
 	compose_cmd -f docker-compose-dev.yml up --build
 }

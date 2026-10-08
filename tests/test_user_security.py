@@ -112,6 +112,7 @@ def test_web_submission_owned_and_scoped_queue_logs(env):
 TASK_ROUTES = [
     ('GET', '/api/v1/tasks/{task}'), ('GET', '/api/v1/tasks/{task}/summary'),
     ('GET', '/api/v1/tasks/{task}/screenshot'), ('GET', '/api/v1/tasks/{task}/video'),
+    ('GET', '/api/v1/tasks/{task}/images/normal_image'),
     ('GET', '/live_interact/{task}/status'), ('POST', '/live_interact/{task}'),
     ('GET', '/report/{task}'), ('GET', '/report/{task}/json'), ('GET', '/tasklog/{task}'),
 ]

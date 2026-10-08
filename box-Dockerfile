@@ -12,5 +12,7 @@ RUN apt-get update && apt-get install -y chromium chromium-driver && \
 COPY ./box/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN mkdir /output
 ADD ./box ./box
+COPY ./shared/__init__.py ./box/shared/__init__.py
+COPY ./shared/artifacts.py ./box/shared/artifacts.py
 WORKDIR box
 ENTRYPOINT ["python", "run.py"]

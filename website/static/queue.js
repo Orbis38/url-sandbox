@@ -14,7 +14,7 @@
     function actions(t) {
         var task = encodeURIComponent(t.task);
         var html = '';
-        if (t.status === 'completed') {
+        if (['completed', 'failed', 'timed_out', 'interrupted'].indexOf(t.status) !== -1) {
             html += '<a class="up-link" href="/report/' + task + '" target="_blank">Report</a>' +
                     '<a class="up-link" href="/report/' + task + '/json" target="_blank">JSON</a>';
         }
@@ -44,6 +44,11 @@
     }
 
     function poll() {
+        if (document.hidden) {
+            setTimeout(poll, 5000);
+            return;
+        }
+        var delay = 5000;
         $.ajaxSetup({ headers: { "X-CSRFToken": csrf_token } });
         $.ajax({
             type: "POST",
@@ -54,6 +59,7 @@
             timeout: 8000,
             success: function (data) {
                 if (data && data.kpis) {
+                    delay = (data.kpis.running || data.kpis.queued) ? 2000 : 5000;
                     $("#kpi-total").text(data.kpis.total);
                     $("#kpi-running").text(data.kpis.running);
                     $("#kpi-queued").text(data.kpis.queued);
@@ -64,7 +70,7 @@
                 }
             },
             complete: function () {
-                setTimeout(poll, 2000);
+                setTimeout(poll, delay);
             }
         });
     }
