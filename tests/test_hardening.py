@@ -232,3 +232,13 @@ def test_report_json_keeps_non_ascii_text_readable():
     rendered = pretty_json({'page_title': 'Marco Iannacone — Technology | Pippo.com'})
     assert '—' in rendered and '\\u2014' not in rendered
     assert loads(rendered)['page_title'] == 'Marco Iannacone — Technology | Pippo.com'
+
+
+def test_task_status_is_never_cached(env):
+    web, db, alice, _, _ = env
+    task = str(uuid4())
+    db.taskdblogs.insert_one({'task': task, 'owner_id': str(alice.id), 'start': datetime.utcnow(),
+                              'end': None, 'logs': [], 'status': 'running'})
+    response = logged_in(web, alice).get('/api/v1/tasks/' + task)
+    assert response.status_code == 200 and response.json['status'] == 'running'
+    assert response.headers['Cache-Control'] == 'no-store'

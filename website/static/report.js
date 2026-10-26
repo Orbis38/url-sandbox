@@ -160,9 +160,22 @@
         if (!split || ['queued', 'running'].indexOf(split.getAttribute('data-status')) === -1) return;
         tickElapsed();
         var url = '/api/v1/tasks/' + encodeURIComponent(split.getAttribute('data-task'));
+        var timer = null;
+        var inFlight = false;
+        function schedule(delay) {
+            clearTimeout(timer);
+            timer = setTimeout(check, delay);
+        }
         function check() {
-            if (document.hidden) return setTimeout(check, 5000);
-            fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            if (document.hidden) return schedule(5000);
+            if (inFlight) return;
+            inFlight = true;
+            // A request that hangs (e.g. on a stale keep-alive connection) must not stall
+            // the polling chain, so each one is abandoned after 5s; never reuse a cached answer.
+            var controller = window.AbortController ? new AbortController() : null;
+            var abort = controller ? setTimeout(function () { controller.abort(); }, 5000) : null;
+            fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' },
+                         signal: controller ? controller.signal : undefined })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
                     if (data && ['queued', 'running'].indexOf(data.status) === -1) {
@@ -170,11 +183,16 @@
                         return;
                     }
                     if (data && data.status === 'running') showRunning();
-                    setTimeout(check, 4000);
+                    schedule(2000);
                 })
-                .catch(function () { setTimeout(check, 8000); });
+                .catch(function () { schedule(1000); })
+                .then(function () { clearTimeout(abort); inFlight = false; });
         }
-        setTimeout(check, 4000);
+        // coming back to the tab checks at once instead of waiting for the next tick
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) schedule(0);
+        });
+        schedule(2000);
     }
 
     function init() {

@@ -1166,7 +1166,7 @@ def api_task_status(task_id):
 
     status = task_status(item)
 
-    return jsonify({
+    response = jsonify({
         "task_id": task_id,
         "target_url": item.get("buffer", ""),
         "status": status,
@@ -1174,7 +1174,10 @@ def api_task_status(task_id):
         "submitted_at": start.isoformat() + "Z" if start else None,
         "completed_at": end.isoformat() + "Z" if end else None,
         "duration": _format_duration(start, end)
-    }), 200
+    })
+    # polled by the report page while a task runs: a cached answer would keep it waiting
+    response.headers['Cache-Control'] = 'no-store'
+    return response, 200
 
 
 @APP.route('/api/v1/tasks/<task_id>/summary', methods=['GET'])
