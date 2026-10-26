@@ -18,7 +18,8 @@ def pretty_json(value):
     '''
     object to json
     '''
-    return dumps(value, indent=4)
+    # keep non-ASCII text readable (— instead of \u2014); autoescape still guards the HTML
+    return dumps(value, indent=4, ensure_ascii=False)
 
 
 def make_json_table(env, data, header) -> str:
@@ -164,7 +165,7 @@ def make_report(parsed):
                         filename, mime = ARTIFACT_NAMES[kind]
                         row[kind] = {'artifact': filename, 'content_type': mime,
                                      'url': f"/api/v1/tasks/{parsed['task']}/images/{kind}"}
-    temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(analysis_data), parsed['task'], None, parsed['task'], "application/json", datetime.now())
+    temp_id = add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(analysis_data, ensure_ascii=False), parsed['task'], None, parsed['task'], "application/json", datetime.now())
 
     # Build & store AI-ready multimodal summary for Playbooks & local LLMs (Gemma)
     with ignore_exception(Exception):
@@ -227,7 +228,7 @@ def make_report(parsed):
             "threat_indicators": heuristics.get('threat_indicators', []),
             "screenshot_url": f"/api/v1/tasks/{parsed['task']}/screenshot"
         }
-        add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(ai_summary_dict), parsed['task'], None, parsed['task'], "application/json; type=ai_summary", datetime.now())
+        add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(ai_summary_dict, ensure_ascii=False), parsed['task'], None, parsed['task'], "application/json; type=ai_summary", datetime.now())
         log_string("Saved AI multimodal summary to GridFS", task=parsed['task'])
 
     # Interactive intro note renders above the screenshot.

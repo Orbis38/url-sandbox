@@ -30,6 +30,20 @@
         return th ? th.textContent.trim() : '';
     }
 
+    // Reports stored before qbreport kept non-ASCII text show it as "\u2014" style escapes.
+    // Re-decode string literals of JSON blocks only; numbers and layout stay untouched.
+    function unescapeJson(node) {
+        var blocks = node.querySelectorAll('pre');
+        for (var i = 0; i < blocks.length; i++) {
+            var text = blocks[i].textContent;
+            if (text.indexOf('\\u') === -1) continue;
+            try { JSON.parse(text); } catch (e) { continue; }
+            blocks[i].textContent = text.replace(/"(?:[^"\\]|\\.)*"/g, function (literal) {
+                return JSON.stringify(JSON.parse(literal));
+            });
+        }
+    }
+
     function setOpen(node, open) {
         var body = node.querySelector('tbody');
         if (body) body.style.display = open ? '' : 'none';
@@ -50,6 +64,7 @@
                 var rule = SECTIONS[name] || ['overview', true];
                 tab = rule[0];
                 setOpen(node, rule[1]);
+                unescapeJson(node);
                 if (name === 'Logs') node.classList.add('up-log-section');
                 counts[tab]++;
             } else if (node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {

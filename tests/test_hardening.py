@@ -223,3 +223,12 @@ def test_analyze_and_wait_opens_the_task_report(env):
     assert response.status_code == 302 and response.headers['Location'].endswith('/report/' + task)
     page = client.get('/report/' + task)
     assert page.status_code == 200 and b'Waiting for a free sandbox' in page.data
+
+
+def test_report_json_keeps_non_ascii_text_readable():
+    from json import dumps, loads
+    from test_performance import load_functions
+    pretty_json = load_functions('backend/qbreport.py', ['pretty_json'], {'dumps': dumps})['pretty_json']
+    rendered = pretty_json({'page_title': 'Marco Iannacone — Technology | Pippo.com'})
+    assert '—' in rendered and '\\u2014' not in rendered
+    assert loads(rendered)['page_title'] == 'Marco Iannacone — Technology | Pippo.com'
