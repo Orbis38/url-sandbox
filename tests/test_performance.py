@@ -58,6 +58,42 @@ def test_event_parser_batches_and_skips_malformed_records():
     assert db.storage.bytes < 100 * 1024
 
 
+def test_network_graph_hosts_come_from_request_urls(tmp_path):
+    # Shapes as Chrome reports them: requestWillBeSent headers carry no Host/:authority,
+    # only the ExtraInfo event does (and parse_ouput does not keep ExtraInfo events).
+    def event(method, params):
+        return {'message': json.dumps({'message': {'method': method, 'params': params}})}
+    logs = [
+        event('Network.requestWillBeSent', {'request': {'url': 'https://target.example/login', 'headers': {'User-Agent': 'UA'}}}),
+        event('Network.requestWillBeSentExtraInfo', {'headers': {':authority': 'target.example'}}),
+        event('Network.responseReceived', {'response': {'url': 'https://target.example/login', 'headers': {'server': 'x'}}}),
+        event('Network.requestWillBeSent', {'request': {'url': 'https://cdn.example:8443/app.js', 'headers': {}}}),
+        event('Network.requestWillBeSent', {'request': {'url': 'https://api.telegram.org/bot/send', 'headers': {}}}),
+        event('Network.requestWillBeSent', {'request': {'url': 'data:image/gif;base64,R0lGOD', 'headers': {}}}),
+    ]
+    from urllib.parse import urlparse
+    namespace = load_functions('box/qbsandbox.py', ['find_key', 'parse_ouput', 'request_host'],
+                               {'loads': json.loads, 'urlparse': urlparse})
+    db = TinyDB(storage=CountingStorage)
+    namespace['parse_ouput'](logs, db.table('analyzer_table'))
+    hosts = [namespace['request_host'](row) for row in db.table('analyzer_table').all()]
+    assert [h for h in hosts if h] == ['target.example', 'cdn.example:8443', 'api.telegram.org']
+    assert namespace['request_host']({'headers': {'Host': 'legacy.example'}}) == 'legacy.example'
+
+    pytest.importorskip('networkx')
+    pytest.importorskip('matplotlib')
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from networkx import Graph, circular_layout
+    namespace.update({'Graph': Graph, 'circular_layout': circular_layout, 'plt': plt,
+                      'BytesIO': BytesIO, 'save_image': save_image})
+    load_functions('box/qbsandbox.py', ['make_network'], namespace)
+    namespace['make_network'](db.table('analyzer_table'), db.table('network_table'), str(tmp_path))
+    assert db.table('network_table').all()[0]['circular_layout']['artifact'] == 'network.png'
+    assert (tmp_path / 'network.png').stat().st_size > 0
+
+
 def test_screenshot_helpers_keep_binary_bytes_out_of_json(tmp_path):
     namespace = load_functions('box/qbsandbox.py',
         ['make_ai_screenshot_jpeg', 'take_normal_screen_shot', 'take_full_screen_shot'],

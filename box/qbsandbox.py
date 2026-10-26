@@ -49,6 +49,24 @@ def get_dns(parsed, extracted_table):
         print(e)
         print("[SandBox] get_dns failed")
 
+def request_host(item):
+    '''
+    host contacted by one recorded request: from its URL (always present on
+    Network.requestWillBeSent), else from a Host/:authority header (older rows)
+    '''
+    url = item.get('url')
+    if url:
+        parts = urlparse(url)
+        if parts.scheme not in ('http', 'https', 'ws', 'wss') or not parts.hostname:
+            return None  # data:, blob:, chrome-extension: … never reach the network
+        try:
+            return parts.hostname + (':{}'.format(parts.port) if parts.port else '')
+        except ValueError:
+            return parts.hostname
+    headers = item.get('headers') or {}
+    return headers.get('Host') or headers.get(':authority')
+
+
 def make_network(analyzer_table, network_graph, task_dir):
     try:
         list_domain_counters = set()
@@ -56,19 +74,15 @@ def make_network(analyzer_table, network_graph, task_dir):
         domain_counter = 0
         for item in analyzer_table.all():
             try:
-                if 'headers' in item:
-                    if 'Host' in item['headers']:
-                        if item['headers']['Host'] not in list_domain_counters:
-                            list_domain_counters.add(item['headers']['Host'])
-                            dict_domain_counters.update({domain_counter: item['headers']['Host']})
-                            domain_counter += 1
-                    if ':authority' in item['headers']:
-                        if item['headers'][':authority'] not in list_domain_counters:
-                            list_domain_counters.add(item['headers'][':authority'])
-                            dict_domain_counters.update({domain_counter: item['headers'][':authority']})
-                            domain_counter += 1
+                host = request_host(item)
+                if host and host not in list_domain_counters:
+                    list_domain_counters.add(host)
+                    dict_domain_counters.update({domain_counter: host})
+                    domain_counter += 1
             except BaseException:
                 pass
+        if not list_domain_counters:
+            print("[SandBox] make_network: no request hosts recorded, graph skipped")
 
         G = Graph()
         if len(list_domain_counters) > 0:
@@ -415,10 +429,17 @@ def parse_ouput(logs, table):
                 if method not in ('Network.responseReceived', 'Network.requestWillBeSent'):
                     continue
                 rec = find_key('headers', message)
+                # requestWillBeSent headers omit Host/:authority (only the ExtraInfo
+                # event has them), so keep the request URL for make_network.
+                url = message['params']['request'].get('url') if method == 'Network.requestWillBeSent' \
+                    and isinstance(message.get('params', {}).get('request'), dict) else None
             except (KeyError, TypeError, ValueError, AttributeError):
                 continue
-            if rec:
-                rows.append({'type': 'Received' if method == 'Network.responseReceived' else 'Sent', 'headers': rec})
+            if rec or url:
+                row = {'type': 'Received' if method == 'Network.responseReceived' else 'Sent', 'headers': rec or {}}
+                if url:
+                    row['url'] = url
+                rows.append(row)
         if rows:
             table.insert_multiple(rows)
         print("[SandBox] parsed output")
