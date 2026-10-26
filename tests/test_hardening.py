@@ -21,6 +21,29 @@ def test_secret_is_required_persistent_and_not_public(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError): load_session_secret()
 
 
+def test_unreadable_secret_names_file_and_reason(tmp_path, monkeypatch):
+    monkeypatch.delenv('URL_SANDBOX_SESSION_SECRET', raising=False)
+    key = tmp_path / 'key'
+    key.mkdir()  # what Docker leaves behind when the bind-mounted file is missing
+    monkeypatch.setenv('URL_SANDBOX_SESSION_SECRET_FILE', str(key))
+    with pytest.raises(RuntimeError, match='Is a directory') as error:
+        load_session_secret()
+    assert str(key) in str(error.value)
+
+
+def test_init_script_replaces_docker_created_directory(tmp_path):
+    import shutil, subprocess, sys
+    root = tmp_path / 'repo'
+    (root / 'scripts').mkdir(parents=True)
+    shutil.copy(Path(__file__).resolve().parents[1] / 'scripts/init_session_secret.py', root / 'scripts')
+    (root / '.secrets/flask-session.key').mkdir(parents=True)
+    out = subprocess.run([sys.executable, str(root / 'scripts/init_session_secret.py')],
+                         capture_output=True, text=True, check=True).stdout
+    key = root / '.secrets/flask-session.key'
+    assert key.is_file() and len(key.read_text().strip()) >= 48
+    assert 'Private session secret created' in out
+
+
 @pytest.mark.parametrize('value', [-1, 0, 121, 10**9, True, 1.5, None, {}, 'invalid'])
 def test_invalid_timeouts_never_dispatch(env, value):
     web, _, alice, _, dispatched = env

@@ -17,7 +17,7 @@ services:
       - backend
     volumes:
       - ./shared:/website/shared:z
-      - ./.secrets/flask-session.key:/run/secrets/flask_session_key:ro
+      - ./.secrets/flask-session.key:/run/secrets/flask_session_key:ro,z
       - /etc/localtime:/etc/localtime:ro
       - url-sandbox_output:/tmp/urlsandbox/output:z
     healthcheck:

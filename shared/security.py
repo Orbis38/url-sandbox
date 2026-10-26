@@ -13,8 +13,11 @@ def load_session_secret():
         filename = environ.get('URL_SANDBOX_SESSION_SECRET_FILE', '/run/secrets/flask_session_key')
         try:
             secret = Path(filename).read_text().strip()
-        except OSError:
-            raise RuntimeError('A persistent Flask session secret must be configured') from None
+        except OSError as error:
+            # name the file and the OS reason (missing, permission/SELinux, a directory) but never content
+            raise RuntimeError(f'A persistent Flask session secret must be configured: cannot read '
+                               f'{filename} ({error.strerror or type(error).__name__}). '
+                               'Run scripts/init_session_secret.py on the host.') from None
     if len(secret) < 48:
         raise RuntimeError('The Flask session secret must contain at least 48 characters')
     return secret
