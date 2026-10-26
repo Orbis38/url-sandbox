@@ -17,15 +17,14 @@
         return LABELS[status] || (status.charAt(0).toUpperCase() + status.slice(1)).replace(/_/g, ' ');
     }
 
+    // One action per row: the report page carries logs and the JSON export.
     function actions(t) {
-        var task = encodeURIComponent(t.task);
-        var html = '';
+        var href = '/report/' + encodeURIComponent(t.task);
         if (['completed', 'failed', 'timed_out', 'interrupted'].indexOf(t.status) !== -1) {
-            html += '<a class="up-link up-link-primary" href="/report/' + task + '" target="_blank">Report</a>' +
-                    '<a class="up-link" href="/report/' + task + '/json" target="_blank">JSON</a>';
+            return '<a class="up-link up-link-primary" href="' + href + '" target="_blank">Report</a>';
         }
-        html += '<a class="up-link" href="/tasklog/' + task + '" target="_blank">Logs</a>';
-        return html;
+        return '<a class="up-link" href="' + href + '" target="_blank">' +
+            (t.status === 'cancelled' ? 'Details' : 'Progress') + '</a>';
     }
 
     function renderRows(tasks) {

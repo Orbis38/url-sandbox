@@ -32,11 +32,11 @@
             <label for="buffer" class="up-field-label up-field-label-lg">Target URL</label>
             <div class="up-input-icon">
                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
-               {{ form.buffer(placeholder="https://example.com", rows=2, spellcheck="false", autocomplete="off") }}
+               {{ form.buffer(placeholder="example.com or https://example.com/path", rows=2, spellcheck="false", autocomplete="off", **{'aria-describedby': 'buffer-hint'}) }}
             </div>
-            <p class="up-hint">
+            <p class="up-hint" id="buffer-hint">
                <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-               The page is opened only inside the sandbox — never on your workstation.
+               The scheme is optional: without it https:// is tried first, then http://. The page opens only inside the sandbox.
             </p>
          </div>
 
@@ -123,7 +123,7 @@
             <ul class="up-recent">
                {% for t in recent or [] %}
                <li>
-                  <a href="{{ '/report/' ~ t.task if t.status in ['completed', 'failed', 'timed_out', 'interrupted'] else '/tasklog/' ~ t.task }}">
+                  <a href="/report/{{ t.task }}">
                      <span class="up-target-url" title="{{ t.target }}"><span class="up-target-host">{{ t.host }}</span><span class="up-target-rest">{{ t.rest }}</span></span>
                      <span class="up-pill up-pill-{{ t.status }}">{{ t.status_label }}</span>
                   </a>

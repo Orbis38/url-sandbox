@@ -163,3 +163,51 @@ def test_celery_configuration_materializes_without_legacy_name_conflicts():
     assert app.conf.task_acks_late is False
     assert app.conf.task_reject_on_worker_lost is False
     assert app.conf.accept_content==['json']
+
+
+@pytest.mark.parametrize('typed, stored, fallback', [
+    ('example.com/path?q=1', 'https://example.com/path?q=1', True),
+    ('  example.com  ', 'https://example.com', True),
+    ('http://example.com', 'http://example.com', False),
+    ('HTTPS://example.com', 'HTTPS://example.com', False),
+])
+def test_targets_without_scheme_assume_https_and_flag_fallback(env, typed, stored, fallback):
+    web, _, alice, _, dispatched = env
+    form = {'buffer': typed, 'useragents': 'Chrome', 'urltimeout': '10',
+            'analyzertimeout': '60', 'interactivetimeout': '300'}
+    assert logged_in(web, alice).post('/url/', data=form).status_code == 302
+    assert logged_in(web, alice).post('/api/v1/analyze', json={'url': typed}).status_code == 201
+    for call in dispatched:
+        assert call['args'][0]['buffer'] == stored
+        assert call['args'][0]['scheme_fallback'] is fallback
+
+
+def test_sandbox_falls_back_to_http_only_for_assumed_scheme():
+    from requests.exceptions import ConnectionError as RequestsConnectionError, RequestException
+    from test_performance import load_functions
+    calls = []
+
+    class Response:
+        history, headers, status_code = [], {}, 200
+        request = SimpleNamespace(headers={})
+        def close(self): pass
+
+    def rget(url, **kwargs):
+        calls.append(url)
+        if url.startswith('https://'):
+            raise RequestsConnectionError('TLS handshake failed')
+        return Response()
+
+    rows = []
+    namespace = load_functions('box/qbsandbox.py', ['get_headers'], {
+        'rget': rget, 'RequestException': RequestException, 'get_cert': lambda *a: None})
+    table = SimpleNamespace(insert_multiple=rows.extend)
+    assumed = {'buffer': 'https://example.com', 'scheme_fallback': True, 'useragent_mapped': 'UA'}
+    namespace['get_headers'](assumed, table)
+    assert calls == ['https://example.com', 'http://example.com']
+    assert assumed['buffer'] == 'http://example.com' and rows
+
+    calls.clear()
+    typed = {'buffer': 'https://example.com', 'scheme_fallback': False, 'useragent_mapped': 'UA'}
+    namespace['get_headers'](typed, table)
+    assert calls == ['https://example.com'] and typed['buffer'] == 'https://example.com'

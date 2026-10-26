@@ -3,6 +3,7 @@
     web interface
 '''
 
+import re
 from os import environ, path
 from uuid import UUID, uuid4
 from datetime import timedelta, datetime
@@ -351,10 +352,11 @@ class CustomViewBufferForm(BaseView):
                 flash('Invalid analysis options.', 'error')
                 return self.render('upload.html', header='New Analysis', form=temp_form, switches_details='',
                                    recent=get_queue_tasks(limit=3)), 400
-            if temp_form.buffer.data != "":
+            target, scheme_fallback = normalize_target(temp_form.buffer.data)
+            if target != "":
                 good_url = False
                 try:
-                    url_validators.url(temp_form.buffer.data)
+                    url_validators.url(target)
                     good_url = True
                 except BaseException:
                     pass
@@ -365,7 +367,8 @@ class CustomViewBufferForm(BaseView):
                         result.update({item[0]: False})
                     for item in request.form.getlist("choices"):
                         result.update({item: True})
-                    result["buffer"] = temp_form.buffer.data
+                    result["buffer"] = target
+                    result["scheme_fallback"] = scheme_fallback
                     result["proxy"] = 'socks5://proxy:9050' if result.get('use_proxy') else ''
                     result["task"] = task
                     result["owner_id"] = str(current_user.get_id())
@@ -442,6 +445,20 @@ STATUS_LABELS = {
     'timed_out': 'Timed out', 'interrupted': 'Interrupted', 'cancelled': 'Cancelled'
 }
 PROBLEM_STATES = {'failed', 'timed_out', 'interrupted', 'cancelled'}
+
+
+SCHEME_PATTERN = re.compile(r'^[a-z][a-z0-9+.-]*://', re.IGNORECASE)
+
+
+def normalize_target(raw):
+    '''
+    accept targets typed without a scheme: assume https:// and flag it, so the
+    sandbox may fall back to http:// when the https attempt fails
+    '''
+    url = (raw or '').strip()
+    if url and not SCHEME_PATTERN.match(url):
+        return 'https://' + url.lstrip('/'), True
+    return url, False
 
 
 def split_target(target):
@@ -1093,7 +1110,7 @@ def api_analyze():
         return jsonify(error=str(error)), 400
     if not isinstance(data.get('url', data.get('buffer', '')), str):
         return jsonify(error='URL must be a string'), 400
-    url = (data.get("url") or data.get("buffer") or "").strip()
+    url, scheme_fallback = normalize_target(data.get("url") or data.get("buffer") or "")
     if not url:
         return jsonify(error="Missing required 'url' parameter."), 400
 
@@ -1107,6 +1124,7 @@ def api_analyze():
         "task": task_id,
         "owner_id": request_owner_id(),
         "buffer": url,
+        "scheme_fallback": scheme_fallback,
         "use_proxy": bool(data.get("use_tor", data.get("use_proxy", True))),
         "proxy": data.get("proxy", "socks5://proxy:9050"),
         "no_redirect": bool(data.get("no_redirect", False)),

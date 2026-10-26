@@ -38,7 +38,7 @@
 {% endblock %}
 {% block body %}
 {{ super() }}
-<div class="up-report-split">
+<div class="up-report-split" data-task="{{ task_id }}" data-status="{{ run.status }}">
    <div class="up-report-content">
       <div class="up-tabs" role="tablist" aria-label="Report sections" id="report-tabs">
          <button type="button" role="tab" class="up-tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true">Overview <span class="up-tab-count"></span></button>

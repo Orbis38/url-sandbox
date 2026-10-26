@@ -110,10 +110,32 @@
         });
     }
 
+    // While the task is still queued or running, reload once it reaches a final state.
+    function watchProgress() {
+        var split = document.querySelector('.up-report-split');
+        if (!split || ['queued', 'running'].indexOf(split.getAttribute('data-status')) === -1) return;
+        var url = '/api/v1/tasks/' + encodeURIComponent(split.getAttribute('data-task'));
+        function check() {
+            if (document.hidden) return setTimeout(check, 5000);
+            fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (data && ['queued', 'running'].indexOf(data.status) === -1) {
+                        window.location.reload();
+                    } else {
+                        setTimeout(check, 4000);
+                    }
+                })
+                .catch(function () { setTimeout(check, 8000); });
+        }
+        setTimeout(check, 4000);
+    }
+
     function init() {
         distribute();
         bindTabs();
         bindCopy();
+        watchProgress();
     }
 
     if (document.readyState === 'loading') {

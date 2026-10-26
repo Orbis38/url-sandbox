@@ -18,6 +18,7 @@ from selenium.webdriver.common.by import By
 from tinydb import TinyDB
 from bs4 import BeautifulSoup
 from requests import get as rget
+from requests.exceptions import RequestException
 from networkx import Graph, circular_layout
 from io import BytesIO
 from dns.resolver import resolve
@@ -111,7 +112,17 @@ def get_headers(parsed, extracted_table):
             proxies = {'http': proxy_url,
                        'https': proxy_url}
         # One streamed inspection request, instead of HEAD plus a full-body GET.
-        response = rget(parsed['buffer'], proxies=proxies, headers=headers, timeout=10, stream=True)
+        try:
+            response = rget(parsed['buffer'], proxies=proxies, headers=headers, timeout=10, stream=True)
+        except RequestException:
+            # Scheme was not typed: https:// was assumed, so retry once over http://.
+            # The browser navigates later and uses parsed['buffer'], so it follows the fallback.
+            if not (parsed.get('scheme_fallback') and parsed['buffer'].startswith('https://')):
+                raise
+            fallback = 'http://' + parsed['buffer'][len('https://'):]
+            response = rget(fallback, proxies=proxies, headers=headers, timeout=10, stream=True)
+            parsed['buffer'] = fallback
+            print("[SandBox] https failed, fell back to http")
         initial = response.history[0] if response.history else response
         response_headers = dict(initial.headers, response_status=initial.status_code)
         if response_headers:
