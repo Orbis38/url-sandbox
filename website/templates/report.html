@@ -19,7 +19,7 @@
             {% if run.started %}<span>{{ run.started }}</span>{% endif %}
             {% if run.duration %}<span class="up-sep" aria-hidden="true">•</span><span>{{ 'elapsed' if run.status in ['queued', 'running'] else 'ran' }} <span id="run-elapsed" data-seconds="{{ run.elapsed_seconds }}">{{ run.duration }}</span></span>{% endif %}
          </div>
-         {% if run.error %}
+         {% if run.error and not run.unreachable %}
          <p class="up-report-error">
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
             {{ run.error }}
@@ -42,6 +42,38 @@
 {{ super() }}
 <div class="up-report-split" data-task="{{ task_id }}" data-status="{{ run.status }}">
    <div class="up-report-content">
+      {% if run.unreachable %}
+      {% set u = run.unreachable %}
+      <section class="up-callout up-callout-error" role="alert" aria-labelledby="unreachable-title">
+         <div class="up-callout-head">
+            <span class="up-callout-icon"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg></span>
+            <div>
+               <h2 id="unreachable-title" style="margin: 0; font-size: 15px; font-weight: 700">{{ u.title }}</h2>
+               <div class="up-callout-sub">{{ u.message }}</div>
+            </div>
+         </div>
+         <ul class="up-checklist up-diagnosis">
+            {% if u.tor_ok is not none %}
+            <li>{% if u.tor_ok %}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4fc98a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Tor is routing traffic{% else %}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f58b7d" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Tor is not routing traffic{% endif %}</li>
+            {% endif %}
+            <li><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f58b7d" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>{{ 'Site through Tor' if run.proxy else 'Site' }}: no answer</li>
+         </ul>
+         {% if run.unreachable_detail %}<code class="up-mono" style="font-size: 11.5px; color: #e9b8b0; background: transparent; padding: 0; overflow-wrap: anywhere">{{ run.unreachable_detail }}</code>{% endif %}
+         {% if u.suggest_direct and run.retry %}
+         <form method="POST" action="/url/" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="buffer" value="{{ run.retry.buffer }}">
+            {% for key in run.retry.choices %}<input type="hidden" name="choices" value="{{ key }}">{% endfor %}
+            <input type="hidden" name="useragents" value="{{ run.retry.useragents }}">
+            <input type="hidden" name="urltimeout" value="{{ run.retry.urltimeout }}">
+            <input type="hidden" name="analyzertimeout" value="{{ run.retry.analyzertimeout }}">
+            <input type="hidden" name="interactivetimeout" value="{{ run.retry.interactivetimeout }}">
+            <button type="submit" name="submitandwait" value="Analyze &amp; Wait" class="up-btn up-btn-secondary" style="height: 36px; padding: 0 14px !important">Retry without Tor</button>
+            <span style="font-size: 12px; color: var(--up-text-mid)">Without Tor the site sees the sandbox's public IP address.</span>
+         </form>
+         {% endif %}
+      </section>
+      {% endif %}
       <div class="up-tabs" role="tablist" aria-label="Report sections" id="report-tabs">
          <button type="button" role="tab" class="up-tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true">Overview <span class="up-tab-count"></span></button>
          <button type="button" role="tab" class="up-tab" id="tab-network" aria-controls="panel-network" aria-selected="false" tabindex="-1">Network <span class="up-tab-count"></span></button>

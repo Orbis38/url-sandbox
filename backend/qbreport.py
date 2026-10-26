@@ -146,6 +146,11 @@ def make_report(parsed):
     analyzer_db = TinyDB(analyzer_path)
     sniffer_db = TinyDB(sniffer_path)
 
+    reachability = None
+    with ignore_exception(Exception):
+        found = analyzer_db.table('extracted_table').search(lambda x: x if 'reachability' in x else 0)
+        reachability = found[0]['reachability'] if found else None
+
     # Store each image as a binary artifact. HTML and JSON only reference it.
     for table_name in ('screenshot_table', 'network_table'):
         for row in analyzer_db.table(table_name).all():
@@ -226,6 +231,7 @@ def make_report(parsed):
             },
             "dns_records": dns,
             "threat_indicators": heuristics.get('threat_indicators', []),
+            "reachability": reachability,
             "screenshot_url": f"/api/v1/tasks/{parsed['task']}/screenshot"
         }
         add_item_fs(defaultdb["dbname"], defaultdb["reportscoll"], dumps(ai_summary_dict, ensure_ascii=False), parsed['task'], None, parsed['task'], "application/json; type=ai_summary", datetime.now())
@@ -629,3 +635,4 @@ def make_report(parsed):
                               {'artifact_references': True}, parsed['task'], "text/html", datetime.now())
 
     temp_id = add_item_fs(defaultdb["dbname"], defaultdb["taskfileslogscoll"], "\n".join(all_logs['logs']), "log", None, parsed['task'], "text/plain", datetime.now())
+    return reachability

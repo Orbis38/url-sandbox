@@ -20,7 +20,7 @@ from selenium.webdriver.common.by import By
 from tinydb import TinyDB
 from bs4 import BeautifulSoup
 from requests import get as rget
-from requests.exceptions import RequestException
+from requests.exceptions import RequestException, Timeout, SSLError, ProxyError
 from networkx import Graph, circular_layout
 from io import BytesIO
 from dns.resolver import resolve
@@ -118,8 +118,58 @@ def make_network(analyzer_table, network_graph, task_dir):
         print("[SandBox] make_network failed")
 
 
+TOR_CHECK_URL = 'https://check.torproject.org/api/ip'
+
+
+def describe_request_error(error):
+    '''
+    short, analyst-facing reason for a failed request (the raw text stays in "detail")
+    '''
+    text = str(error)
+    if isinstance(error, Timeout):
+        return 'timeout', 'the site did not answer in time'
+    if isinstance(error, SSLError):
+        return 'tls', 'the TLS handshake failed'
+    if any(marker in text for marker in ('NameResolution', 'Name or service not known', 'getaddrinfo')):
+        return 'dns', 'the domain could not be resolved'
+    if 'refused' in text.lower():
+        return 'refused', 'the connection was refused'
+    if isinstance(error, ProxyError):
+        return 'proxy', 'the proxy could not open the connection'
+    return 'connection', 'the connection failed'
+
+
+def check_tor(proxies, headers):
+    '''
+    is Tor itself routing traffic? asks the Tor Project, never the target
+    '''
+    try:
+        answer = rget(TOR_CHECK_URL, proxies=proxies, headers=headers, timeout=15).json()
+        return bool(answer.get('IsTor')), ''
+    except Exception as error:
+        return False, '{}: {}'.format(type(error).__name__, str(error)[:200])
+
+
+def record_unreachable(parsed, extracted_table, error, proxies, headers):
+    '''
+    save why the target could not be reached, and with Tor whether Tor itself works,
+    so the report can tell "Tor is down" apart from "the site refuses Tor"
+    '''
+    kind, reason = describe_request_error(error)
+    via_tor = bool(proxies)
+    record = {'reachable': False, 'via_tor': via_tor, 'kind': kind, 'reason': reason,
+              'detail': '{}: {}'.format(type(error).__name__, str(error)[:300])}
+    if via_tor:
+        record['tor_ok'], record['tor_detail'] = check_tor(proxies, headers)
+    extracted_table.insert({'reachability': record})
+    print("[SandBox] target unreachable: {} ({}){}".format(
+        reason, record['detail'][:160], '' if not via_tor else ' | Tor working: {}'.format(record['tor_ok'])))
+    return record
+
+
 def get_headers(parsed, extracted_table):
     response = None
+    proxies, headers = None, {}
     try:
         headers = {'User-Agent': parsed['useragent_mapped']}
         proxy_url = parsed.get('requests_proxy') or parsed.get('proxy')
@@ -130,10 +180,11 @@ def get_headers(parsed, extracted_table):
         # One streamed inspection request, instead of HEAD plus a full-body GET.
         try:
             response = rget(parsed['buffer'], proxies=proxies, headers=headers, timeout=10, stream=True)
-        except RequestException:
+        except RequestException as error:
             # Scheme was not typed: https:// was assumed, so retry once over http://.
             # The browser navigates later and uses parsed['buffer'], so it follows the fallback.
-            if not (parsed.get('scheme_fallback') and parsed['buffer'].startswith('https://')):
+            # A timeout means "slow" (typical over Tor), not "no https": retrying would only wait again.
+            if isinstance(error, Timeout) or not (parsed.get('scheme_fallback') and parsed['buffer'].startswith('https://')):
                 raise
             fallback = 'http://' + parsed['buffer'][len('https://'):]
             response = rget(fallback, proxies=proxies, headers=headers, timeout=10, stream=True)
@@ -148,8 +199,10 @@ def get_headers(parsed, extracted_table):
             ])
             print("[SandBox] extracted request and response headers")
         get_cert(parsed, extracted_table, response)
+    except RequestException as e:
+        record_unreachable(parsed, extracted_table, e, proxies, headers)
     except Exception as e:
-        print("[SandBox] get_headers failed")
+        print("[SandBox] get_headers failed: {}: {}".format(type(e).__name__, str(e)[:200]))
     finally:
         if response is not None:
             response.close()
@@ -409,6 +462,25 @@ def capture_full_page_png(driver):
     except Exception as error:
         print(f"[SandBox] full-page capture via DevTools failed ({error}), using the viewport", flush=True)
         return driver.find_element(By.TAG_NAME, 'html').screenshot_as_png
+
+
+def record_page_load(driver, extracted_table):
+    '''
+    did the browser leave its start page? on a load timeout it stays on data:, (blank)
+    '''
+    try:
+        url = driver.current_url or ''
+    except Exception:
+        url = ''
+    loaded = bool(url) and not url.startswith(('data:', 'about:blank', 'chrome-error:'))
+    found = extracted_table.search(lambda row: 'reachability' in row)
+    if found:
+        record = dict(found[0]['reachability'], page_loaded=loaded)
+        extracted_table.update({'reachability': record}, doc_ids=[found[0].doc_id])
+    else:
+        extracted_table.insert({'reachability': {'reachable': loaded, 'page_loaded': loaded}})
+    if not loaded:
+        print("[SandBox] page did not load in the browser (still on {})".format(url or 'its start page'))
 
 
 def take_full_screen_shot(driver, screenshot_table, task_dir):
@@ -706,6 +778,7 @@ def chrome_driver(parsed, analyzer_db):
             chromebrowser.get(parsed["buffer"])
         except BaseException:
             pass
+    record_page_load(chromebrowser, extracted_table)
     if parsed.get('block_cookies'):
         dismiss_cookie_banners(chromebrowser, settle=0 if parsed.get('interactive') else 0.6)
     performance_logs = chromebrowser.get_log('performance')

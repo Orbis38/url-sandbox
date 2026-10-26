@@ -5,6 +5,7 @@ from uuid import uuid4
 import ast
 
 import pytest
+from bs4 import BeautifulSoup
 from shared.security import load_session_secret, validate_timeouts, login_attempt
 from shared.lifecycle import task_status
 from conftest import logged_in
@@ -199,9 +200,11 @@ def test_sandbox_falls_back_to_http_only_for_assumed_scheme():
         return Response()
 
     rows = []
-    namespace = load_functions('box/qbsandbox.py', ['get_headers'], {
-        'rget': rget, 'RequestException': RequestException, 'get_cert': lambda *a: None})
-    table = SimpleNamespace(insert_multiple=rows.extend)
+    from requests.exceptions import ProxyError, SSLError, Timeout
+    namespace = load_functions('box/qbsandbox.py', ['describe_request_error', 'record_unreachable', 'get_headers'], {
+        'rget': rget, 'RequestException': RequestException, 'Timeout': Timeout, 'SSLError': SSLError,
+        'ProxyError': ProxyError, 'get_cert': lambda *a: None})
+    table = SimpleNamespace(insert_multiple=rows.extend, insert=rows.append)
     assumed = {'buffer': 'https://example.com', 'scheme_fallback': True, 'useragent_mapped': 'UA'}
     namespace['get_headers'](assumed, table)
     assert calls == ['https://example.com', 'http://example.com']
@@ -242,3 +245,71 @@ def test_task_status_is_never_cached(env):
     response = logged_in(web, alice).get('/api/v1/tasks/' + task)
     assert response.status_code == 200 and response.json['status'] == 'running'
     assert response.headers['Cache-Control'] == 'no-store'
+
+
+def test_unreachable_target_is_diagnosed_without_contacting_it_twice():
+    from requests.exceptions import ConnectTimeout, ProxyError, RequestException, SSLError, Timeout
+    from test_performance import load_functions
+    calls = []
+
+    class Answer:
+        def json(self): return {'IsTor': True}
+
+    def rget(url, **kwargs):
+        calls.append(url)
+        if 'check.torproject.org' in url:
+            return Answer()
+        raise ConnectTimeout('SOCKSHTTPSConnectionPool(host=pippo.com): timed out')
+
+    rows = []
+    namespace = load_functions('box/qbsandbox.py', ['describe_request_error', 'check_tor', 'record_unreachable', 'get_headers'], {
+        'rget': rget, 'RequestException': RequestException, 'Timeout': Timeout, 'SSLError': SSLError,
+        'ProxyError': ProxyError, 'get_cert': lambda *a: None, 'TOR_CHECK_URL': 'https://check.torproject.org/api/ip'})
+    table = SimpleNamespace(insert=rows.append, insert_multiple=rows.extend)
+    parsed = {'buffer': 'https://pippo.com', 'scheme_fallback': True, 'use_proxy': True,
+              'requests_proxy': 'socks5h://proxy:9050', 'useragent_mapped': 'UA'}
+    namespace['get_headers'](parsed, table)
+    # a timeout is "slow", not "no https": no http retry; only the Tor control check follows
+    assert calls == ['https://pippo.com', 'https://check.torproject.org/api/ip']
+    record = rows[0]['reachability']
+    assert record['kind'] == 'timeout' and record['via_tor'] and record['tor_ok'] is True
+
+
+def test_reachability_explanations():
+    from shared.reachability import explain, failure_message
+    assert explain({'reachable': True, 'page_loaded': True}) is None
+    assert failure_message(None) is None
+    blocked = explain({'via_tor': True, 'tor_ok': True, 'reason': 'the site did not answer in time', 'page_loaded': False})
+    assert blocked['title'] == 'The site did not respond through Tor' and blocked['suggest_direct']
+    tor_down = explain({'via_tor': True, 'tor_ok': False, 'reason': 'x', 'page_loaded': False})
+    assert tor_down['title'] == 'Tor is not routing traffic' and not tor_down['suggest_direct']
+    direct = explain({'via_tor': False, 'reason': 'the domain could not be resolved', 'page_loaded': False})
+    assert direct['message'] == 'The domain could not be resolved.'
+    assert 'did not respond through Tor' in failure_message({'via_tor': True, 'tor_ok': True, 'page_loaded': False})
+
+
+def test_report_offers_retry_without_tor_with_the_same_options(env):
+    from gridfs import GridFS
+    import json
+    web, db, alice, _, dispatched = env
+    task = str(uuid4())
+    db.taskdblogs.insert_one({'task': task, 'owner_id': str(alice.id), 'start': datetime.utcnow(),
+        'end': datetime.utcnow(), 'logs': [], 'status': 'failed', 'error': 'The site did not respond through Tor: …',
+        'buffer': 'https://pippo.com', 'scheme_fallback': True, 'use_proxy': True, 'take_screenshot': True,
+        'take_full_screenshot': True, 'useragent': 'Chrome', 'url_timeout': 10, 'analyzer_timeout': 60,
+        'interactive_timeout': 300})
+    GridFS(db).put(json.dumps({'reachability': {'reachable': False, 'via_tor': True, 'tor_ok': True, 'page_loaded': False,
+        'reason': 'the site did not answer in time', 'detail': 'ConnectTimeout: …'}}).encode(),
+        task=task, content_type='application/json; type=ai_summary')
+    client = logged_in(web, alice)
+    page = BeautifulSoup(client.get('/report/' + task).data, 'html.parser')
+    assert 'did not respond through Tor' in page.find(id='unreachable-title').text
+    form = page.find('button', string='Retry without Tor').find_parent('form')
+    data = [(field['name'], field.get('value', '')) for field in form.find_all(['input', 'button']) if field.get('name')]
+    assert ('choices', 'use_proxy') not in data and ('choices', 'take_full_screenshot') in data
+    from werkzeug.datastructures import MultiDict
+    response = client.post(form['action'], data=MultiDict(data))
+    assert response.status_code == 302 and '/report/' in response.headers['Location']
+    sent = dispatched[-1]['args'][0]
+    assert sent['use_proxy'] is False and sent['take_full_screenshot'] is True
+    assert sent['buffer'] == 'https://pippo.com' and sent['scheme_fallback'] is True and sent['url_timeout'] == 10

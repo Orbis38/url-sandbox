@@ -17,6 +17,7 @@ from shared.logger import log_string, setup_task_logger, ignore_exception, cance
 from shared.retention import cleanup_expired_analyses
 from shared.mongodbconn import ensure_indexes
 from shared.security import validate_timeouts
+from shared.reachability import failure_message
 
 DOCKER_CLIENT = from_env()
 ensure_indexes()
@@ -234,7 +235,13 @@ def analyze_url(self, parsed):
         log_string("Error -> {}".format(e), task=parsed['task'])
     parsed['locations']['box_output'] = json_settings[environ["project_env"]]["output_folder"]
     try:
-        make_report(parsed)
+        reachability = make_report(parsed)
+        # A page that never loaded is a failed analysis, not an empty "completed" one.
+        # Interactive sessions stay usable, so they keep their outcome and only show the notice.
+        unreachable = failure_message(reachability)
+        if unreachable and outcome == 'completed' and not parsed.get('interactive'):
+            outcome, failure = 'failed', unreachable
+            log_string(unreachable, task=parsed['task'])
     except Exception as e:
         log_string("Report error -> {}".format(e), task=parsed['task'])
         outcome, failure = 'failed', 'Report generation failed'

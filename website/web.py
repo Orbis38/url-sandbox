@@ -35,6 +35,7 @@ from shared.retention import cleanup_expired_analyses
 from shared.apikeys import create_api_key, authenticate_api_key, revoke_api_key
 from shared.security import load_session_secret, login_attempt, validate_timeouts
 from shared.lifecycle import task_status, TERMINAL
+from shared.reachability import explain as explain_reachability
 
 SWITCHES = [
     ('use_proxy', 'use Tor'),
@@ -605,6 +606,34 @@ def report_run_details(task_id):
         "useragent": doc.get("useragent") or '',
         "timeouts": [doc.get("url_timeout"), doc.get("analyzer_timeout")],
         "proxy": bool(doc.get("use_proxy")),
+        "unreachable": explain_reachability(summary.get("reachability")),
+        "unreachable_detail": (summary.get("reachability") or {}).get("detail", ''),
+        "retry": retry_without_tor(doc),
+    }
+
+
+def _choice(value, field, fallback):
+    allowed = [value for value, _ in BufferForm.__dict__[field].kwargs['choices']]
+    return value if value in allowed else fallback
+
+
+def retry_without_tor(doc):
+    '''
+    the same analysis as a New Analysis form submission, minus Tor (the analyst decides:
+    without Tor the target sees the sandbox's public IP)
+    '''
+    if not doc or not doc.get("use_proxy"):
+        return None
+    target = doc.get("buffer") or ''
+    if doc.get("scheme_fallback") and target.startswith('https://'):
+        target = target[len('https://'):]  # keep the https-then-http behaviour of the original
+    return {
+        "buffer": target,
+        "choices": [key for key, _ in SWITCHES if key != 'use_proxy' and doc.get(key)],
+        "useragents": doc.get("useragent") if doc.get("useragent") in SWITCHES_MAPPED else 'Chrome',
+        "urltimeout": _choice(doc.get("url_timeout"), 'urltimeout', URL_TIMEOUT),
+        "analyzertimeout": _choice(doc.get("analyzer_timeout"), 'analyzertimeout', ANALYZER_TIMEOUT),
+        "interactivetimeout": _choice(doc.get("interactive_timeout"), 'interactivetimeout', 300),
     }
 
 
