@@ -211,3 +211,15 @@ def test_sandbox_falls_back_to_http_only_for_assumed_scheme():
     typed = {'buffer': 'https://example.com', 'scheme_fallback': False, 'useragent_mapped': 'UA'}
     namespace['get_headers'](typed, table)
     assert calls == ['https://example.com'] and typed['buffer'] == 'https://example.com'
+
+
+def test_analyze_and_wait_opens_the_task_report(env):
+    web, _, alice, _, dispatched = env
+    client = logged_in(web, alice)
+    response = client.post('/url/', data={'buffer': 'example.com', 'useragents': 'Chrome', 'urltimeout': '10',
+                                          'analyzertimeout': '60', 'interactivetimeout': '300',
+                                          'submitandwait': 'Analyze & Wait'})
+    task = dispatched[0]['args'][0]['task']
+    assert response.status_code == 302 and response.headers['Location'].endswith('/report/' + task)
+    page = client.get('/report/' + task)
+    assert page.status_code == 200 and b'Waiting for a free sandbox' in page.data

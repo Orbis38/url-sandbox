@@ -80,11 +80,6 @@
         } else if (empty) {
             empty.parentNode.removeChild(empty);
         }
-        var count = document.getElementById('queue-count');
-        if (count) {
-            var total = rows.length;
-            count.textContent = (shown === total ? total : shown + ' of ' + total) + (total === 1 ? ' task' : ' tasks');
-        }
     }
 
     function bindControls() {

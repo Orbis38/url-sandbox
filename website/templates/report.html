@@ -17,7 +17,7 @@
          <div class="up-report-meta">
             <span class="up-pill up-pill-{{ run.status }}"><span class="up-pill-dot"></span>{{ run.status_label }}</span>
             {% if run.started %}<span>{{ run.started }}</span>{% endif %}
-            {% if run.duration %}<span class="up-sep" aria-hidden="true">•</span><span>ran {{ run.duration }}</span>{% endif %}
+            {% if run.duration %}<span class="up-sep" aria-hidden="true">•</span><span>{{ 'elapsed' if run.status in ['queued', 'running'] else 'ran' }} {{ run.duration }}</span>{% endif %}
          </div>
          {% if run.error %}
          <p class="up-report-error">
@@ -28,10 +28,12 @@
       </div>
       <div class="up-topbar-actions">
          <a href="/tasklog/{{ task_id }}" class="up-btn up-btn-ghost" style="height: 36px; padding: 0 14px !important">View logs</a>
+         {% if report_body %}
          <a href="/report/{{ task_id }}/json" class="up-btn up-btn-primary" style="height: 36px; padding: 0 14px !important" target="_blank">
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
             Export JSON
          </a>
+         {% endif %}
       </div>
    </div>
 </header>
@@ -57,10 +59,18 @@
          {% if report_body %}
          {{ report_body | safe }}
          {% else %}
-         <div class="up-empty-box">
-            <strong>No report is available for this task yet</strong>
-            <span>It appears here as soon as the analysis finishes. Check the logs for progress.</span>
+         {% if run.status in ['queued', 'running'] %}
+         <div class="up-empty-box" role="status">
+            <span class="taskspinner" aria-hidden="true" style="margin: 0 0 6px"></span>
+            <strong>{{ 'Waiting for a free sandbox' if run.status == 'queued' else 'Analyzing in the sandbox' }}&hellip;</strong>
+            <span>This page refreshes by itself when the analysis finishes. View logs shows live progress.</span>
          </div>
+         {% else %}
+         <div class="up-empty-box">
+            <strong>No report is available for this task</strong>
+            <span>The analysis ended without producing a report. Check the logs for what happened.</span>
+         </div>
+         {% endif %}
          {% endif %}
       </div>
    </div>

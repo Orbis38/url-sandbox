@@ -332,8 +332,6 @@ class CustomViewBufferForm(BaseView):
     '''
     upload buffer main form
     '''
-    extra_js = ['/static/checktask.js']
-
     def is_visible(self):
         '''
         hidden from the sidebar menu, reachable via the New Analysis buttons
@@ -379,13 +377,11 @@ class CustomViewBufferForm(BaseView):
                     result["useragent_mapped"] = SWITCHES_MAPPED[temp_form.useragents.data]
                     enqueue_owned_task(result)
                     if request.form.get('submitandwait') == 'Analyze & Wait':
-                        # stay on the page so the spinner can poll and show the
-                        # finished report inline
-                        flash(gettext(task), 'successandwaituuid')
-                    else:
-                        # plain submit — jump straight to the live task queue
-                        flash(gettext('Analysis queued'), 'success')
-                        return redirect('/queue/')
+                        # open the task's report page; it waits and reloads when the task ends
+                        return redirect('/report/' + task)
+                    # plain submit — jump straight to the live task queue
+                    flash(gettext('Analysis queued'), 'success')
+                    return redirect('/queue/')
                 else:
                     flash(gettext("Invalid URL"), 'error')
             else:

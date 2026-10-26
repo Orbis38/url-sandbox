@@ -507,17 +507,6 @@ details.up-details[open] > summary .up-chev { transform: rotate(90deg); }
 }
 button.custom-close { -webkit-appearance: none; padding: 0 4px; background: none !important; border: 0; color: var(--up-text-mid) !important; font-size: 16px; }
 
-/* submit-and-wait overlay */
-.waiting { position: fixed; inset: 0; z-index: 99999; background: rgba(15, 17, 21, .92); }
-.waiting-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--up-text-mid); }
-.hex-spinner { width: 120px; height: 120px; animation: up-hex 2s linear infinite; }
-.hex-spinner polygon { stroke: var(--up-accent-hover); }
-@keyframes up-hex {
-  0% { stroke-dasharray: 0 0 80 300; }
-  50% { stroke-dasharray: 0 80 160 300; }
-  75% { stroke-dasharray: 0 160 220 300; }
-  100% { stroke-dasharray: 80 220 300 300; }
-}
 .taskspinner {
   border: 2px solid var(--up-border) !important;
   border-top-color: var(--up-accent) !important;

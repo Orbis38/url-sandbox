@@ -78,19 +78,7 @@
     {% if messages %}
       {% for category, m in messages %}
         {% if category %}
-          {% if category == "successandwaituuid" %}
-            <div class="waiting">
-              <div class="waiting-box">
-              <script type="text/javascript">window.onload = function(){check_task("{{ m }}");}</script>
-              <svg class="hex-spinner" viewBox="0 -5 100 110" aria-hidden="true">
-              <polygon stroke-width="7" fill-opacity="0" id="hex" points="50 1 95 25 95 75 50 99 5 75 5 25"/>
-              </svg>
-              <p role="status" style="margin-top:16px">Analyzing in the sandbox&hellip;<br><span class="up-mono" style="font-size:12px;color:var(--up-muted)">{{ m }}</span></p>
-              </div>
-            </div>
-            {% continue %}
-          {% endif %} 
-        {% set mapping = {'message': 'info', 'error': 'danger', 'successandwaituuid':'warning'} %}
+        {% set mapping = {'message': 'info', 'error': 'danger'} %}
         <div class="alert alert-custom-{{ mapping.get(category, category) }} alert-dismissable">
         {% else %}
         <div class="alert alert-dismissable">
