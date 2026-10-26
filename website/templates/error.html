@@ -1,54 +1,43 @@
-<!-- flat flask-admin template with sidebar, UrlProbe dark theme -->
+<!-- standalone error page, UrlProbe dark theme (design source: design/ui-refresh/Error.dc.html) -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>UrlProbe - Error</title>
       <link rel="icon" type="image/png" href="/static/urlprobe_icon.png">
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
       <style>
-         html,
-         body {
-         height: 100%;
-         margin: 0;
-         padding: 0;
-         width: 100%;
-         font-family: 'IBM Plex Mono', monospace;
-         background-color: oklch(0.16 0.006 260);
-         color: oklch(0.92 0.005 260);
-         }
-         body {
-         display: table;
-         }
-         .typewriter {
-         text-align: center;
-         display: table-cell;
-         vertical-align: middle;
-         }
-         .typewriter a {
-         color: oklch(0.85 0.1 264);
-         }
-         .typewriter h1 {
-         border-right: 5px solid oklch(0.62 0.19 264);
-         display: inline-block;
-         white-space: nowrap;
-         overflow: hidden;
-         animation: typing 4s steps(30, end), blinkingcursor .5s step-end infinite;
-         }
-         @keyframes blinkingcursor {
-         from,
-         to {
-         border-color: transparent
-         }
-         50% {
-         border-color: oklch(0.62 0.19 264);
-         }
-         }
+         html, body { margin: 0; min-height: 100%; background: #0f1115; color: #e6e8ec; font: 14px/1.5 'Inter', system-ui, sans-serif; }
+         main { min-height: 100vh; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 48px 16px; }
+         .box { width: 100%; max-width: 520px; display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
+         .brand { display: flex; align-items: center; gap: 10px; color: #e6e8ec; text-decoration: none; font-weight: 800; font-size: 15px; }
+         .brand img { width: 32px; height: 32px; border-radius: 8px; }
+         .code { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: #b3bcff; }
+         h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -.5px; line-height: 1.2; }
+         p { margin: 0; color: #a0a6b0; }
+         .detail { width: 100%; box-sizing: border-box; background: #16181d; border: 1px solid #2a2e36; border-radius: 10px; padding: 12px 14px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; overflow-wrap: anywhere; }
+         .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+         .actions a { height: 42px; padding: 0 18px; border-radius: 10px; display: inline-flex; align-items: center; font-weight: 700; text-decoration: none; }
+         .primary { background: #4f5fe6; color: #fff; }
+         .primary:hover { background: #6070f0; }
+         .secondary { border: 1px solid #353a44; color: #e6e8ec; font-weight: 600 !important; }
+         a:focus-visible { outline: 2px solid #8e9bff; outline-offset: 2px; }
       </style>
    </head>
    <body>
-      <div class="typewriter">
-         <h1>Nice Job, you broke me?!</h1>
-         <br>
-         {{ task }} <a href={{ error }}> Home </a>
-      </div>
+      <main>
+         <div class="box">
+            <a class="brand" href="/queue/"><img src="/static/urlprobe_icon.png" alt="">UrlProbe</a>
+            <div class="code">Error</div>
+            <h1>Something went wrong</h1>
+            <p>The page could not be loaded. If you were opening a report, the task may have passed the retention window or belong to another analyst.</p>
+            {% if task %}<div class="detail">{{ task }}</div>{% endif %}
+            <div class="actions">
+               <a class="primary" href="{{ error or '/queue/' }}">Back to Task Queue</a>
+               <a class="secondary" href="/url/">New Analysis</a>
+            </div>
+         </div>
+      </main>
    </body>
 </html>

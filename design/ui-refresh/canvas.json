@@ -1,0 +1,22 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-26T20:10:00Z"},
+  "title": "UrlProbe UI Refresh",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 1060, "title": "New Analysis", "expand": "fill"},
+    "Queue.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 980, "title": "Task Queue", "expand": "fill"},
+    "Report.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 1240, "title": "Analysis Report", "expand": "fill", "is_interactive": true},
+    "ApiKeys.dc.html": {"x": 0, "y": 1460, "w": 1440, "h": 980, "title": "API Keys", "expand": "fill"},
+    "Logs.dc.html": {"x": 1520, "y": 1460, "w": 1440, "h": 900, "title": "Active Logs", "expand": "fill"},
+    "Login.dc.html": {"x": 3040, "y": 1460, "w": 1440, "h": 900, "title": "Sign in", "expand": "fill"},
+    "Error.dc.html": {"x": 0, "y": 2560, "w": 1440, "h": 760, "title": "Error page", "expand": "fill"},
+    "Foundations.dc.html": {"x": 1520, "y": 2560, "w": 1440, "h": 1180, "title": "Foundations"}
+  },
+  "order": ["Main.dc.html", "Queue.dc.html", "Report.dc.html", "ApiKeys.dc.html", "Logs.dc.html", "Login.dc.html", "Error.dc.html", "Foundations.dc.html"],
+  "notes": {
+    "title": {"x": 0, "y": -300, "text": "UrlProbe — UI refresh", "kind": "title1", "maxW": 4480}
+  },
+  "designSystems": []
+}

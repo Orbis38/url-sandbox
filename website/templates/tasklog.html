@@ -1,17 +1,35 @@
 {% extends 'admin/master.html' %}
+{% block page_header %}
+<header class="up-report-head">
+   <nav aria-label="Breadcrumb" class="up-breadcrumb">
+      <a href="/queue/">Task Queue</a>
+      <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span class="up-mono" title="{{ task_id }}">{{ task_id[:8] }}</span>
+      <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span>Logs</span>
+   </nav>
+   <div class="up-report-title-row">
+      <div class="up-report-title-main">
+         <div class="up-report-title"><h1 title="{{ target }}">{{ target }}</h1></div>
+      </div>
+      <div class="up-topbar-actions">
+         <a href="/report/{{ task_id }}" class="up-btn up-btn-ghost" style="height: 36px; padding: 0 14px !important">Open report</a>
+      </div>
+   </div>
+</header>
+{% endblock %}
 {% block body %}
 {{ super() }}
-<div class="up-report-wrap">
-   <a class="up-back" href="/queue/">&larr; Back to queue</a>
-   <div class="up-log-panel up-log-panel-static">
-      <div class="up-log-head">Task Log &mdash; {{ target }}</div>
+<div class="up-page">
+   <section class="up-log-panel">
       <div class="up-log-lines">
          {% for line in logs %}
          <div class="up-log-line">{{ line }}</div>
          {% else %}
-         <div style="color:var(--up-muted)">No log lines recorded for this task.</div>
+         <div class="up-log-line" style="color: var(--up-muted)">No log lines recorded for this task.</div>
          {% endfor %}
       </div>
-   </div>
+      <div class="up-log-foot"><span>{{ logs|length }} line{{ '' if logs|length == 1 else 's' }}</span></div>
+   </section>
 </div>
 {% endblock body %}

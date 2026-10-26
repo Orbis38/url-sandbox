@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UrlProbe — Active Logs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1115}
+a{color:#b3bcff}a:hover{color:#d4d9ff}
+.fx:focus{border-color:#4f5fe6 !important;box-shadow:0 0 0 3px rgba(79,95,230,.25)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.pulse{animation:pulse 1.4s ease-in-out infinite}
+.ln:hover{background:#15181d}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #e6e8ec; background: #0f1115; font-size: 13px; line-height: 1.5; display: flex; flex-wrap: wrap; min-height: 900px">
+
+  <aside style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0b0d10; border-right: 1px solid #23262d; display: flex; flex-direction: column; gap: 4px; padding: 16px 12px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; text-decoration: none">
+      <img src="/_blob/76d2eba8fec46b1c50df29fdc61e9d03" alt="" style="width: 36px; height: 36px; border-radius: 9px">
+      <span style="display: flex; flex-direction: column; line-height: 1.2">
+        <span style="font-weight: 800; font-size: 15px; color: #e6e8ec">UrlProbe</span>
+        <span style="font-size: 10px; letter-spacing: 1.2px; color: #868c97; font-weight: 600">URL SANDBOX</span>
+      </span>
+    </a>
+    <a href="Main.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 9px; background: #4f5fe6; color: #ffffff; font-weight: 600; text-decoration: none; margin-bottom: 14px">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      New Analysis
+    </a>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97; padding: 8px 10px 4px">MONITOR</div>
+    <a href="Queue.dc.html" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; color: #c4c8cf; text-decoration: none; font-weight: 500">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>
+      <span style="flex: 1">Task Queue</span>
+      <span style="font-size: 11px; font-weight: 700; color: #e6b94a; background: #2a2414; border-radius: 10px; padding: 1px 8px">2</span>
+    </a>
+    <a href="Logs.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; background: #1c2140; color: #d4d9ff; text-decoration: none; font-weight: 600">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      Active Logs
+    </a>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97; padding: 14px 10px 4px">ACCOUNT</div>
+    <a href="ApiKeys.dc.html" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; color: #c4c8cf; text-decoration: none; font-weight: 500">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="m10.7 12.3 9.3-9.3M17 6l3 3M15 8l2 2"></path></svg>
+      API Keys
+    </a>
+    <div style="flex: 1; min-height: 24px"></div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 6px 0; border-top: 1px solid #23262d">
+      <span style="width: 30px; height: 30px; border-radius: 50%; background: #243246; color: #cfe3ff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">SO</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25">
+        <span style="font-weight: 600; font-size: 13px">soc-analyst</span>
+        <span style="font-size: 11px; color: #868c97">Analyst</span>
+      </span>
+      <a href="Login.dc.html" aria-label="Log out" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid #2a2e36; color: #a0a6b0; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+      </a>
+    </div>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 32px; border-bottom: 1px solid #23262d">
+      <div>
+        <h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.2px">Active Logs</h1>
+        <p style="margin: 2px 0 0; color: #a0a6b0">Streaming output from your running tasks — last 3 minutes.</p>
+      </div>
+    </header>
+
+    <div style="padding: 24px 32px 40px; max-width: 1280px; box-sizing: border-box; width: 100%">
+      <section style="background: #0b0d10; border: 1px solid #2a2e36; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; background: #121419; border-bottom: 1px solid #23262d">
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: #4fc98a"><span class="pulse" style="width: 8px; height: 8px; border-radius: 50%; background: #4fc98a"></span>Streaming</span>
+          <span style="width: 1px; height: 18px; background: #2a2e36"></span>
+          <div role="group" aria-label="Log level" style="display: flex; gap: 4px">
+            <button type="button" aria-pressed="true" style="height: 28px; padding: 0 10px; border: 1px solid #353b70; border-radius: 6px; background: #181c33; color: #c9cfff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer">All</button>
+            <button type="button" aria-pressed="false" style="height: 28px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 6px; background: transparent; color: #a0a6b0; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer">Warnings</button>
+            <button type="button" aria-pressed="false" style="height: 28px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 6px; background: transparent; color: #a0a6b0; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer">Errors</button>
+          </div>
+          <label for="task" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Task</label>
+          <select id="task" class="fx" style="height: 30px; padding: 0 10px; background: #0c0e12; border: 1px solid #2f343d; border-radius: 6px; color: #e6e8ec; font: inherit; font-size: 12px; outline: none">
+            <option>All running tasks (2)</option>
+          </select>
+          <div style="margin-left: auto; display: flex; gap: 6px">
+            <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #2a2e36; border-radius: 6px; background: transparent; color: #c4c8cf; font: inherit; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer">
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
+              Pause
+            </button>
+            <button type="button" aria-label="Copy visible logs" style="width: 30px; height: 30px; border: 1px solid #2a2e36; border-radius: 6px; background: transparent; color: #c4c8cf; display: inline-flex; align-items: center; justify-content: center; cursor: pointer">
+              <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div role="log" aria-live="polite" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.6; padding: 8px 0; height: 560px; overflow-y: auto">
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:02</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #b3bcff">a41c9e2b</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Task picked up by worker-2, starting sandbox container</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:03</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #b3bcff">a41c9e2b</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Tor circuit rotated, new exit node ready</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:05</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #b3bcff">a41c9e2b</span><span style="color: #c4c8cf; overflow-wrap: anywhere">VNC session ready at 30 fps, waiting for analyst</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:06</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #d7b8ff">5be07f13</span><span style="color: #c4c8cf; overflow-wrap: anywhere">GET https://wetransfer-files.download/d/7Hk2 → 302</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:06</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #d7b8ff">5be07f13</span><span style="color: #c4c8cf; overflow-wrap: anywhere">GET https://cdn-wt-share.top/files/Scan_0412.zip → 200 (application/zip, 1.8 MB)</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px; background: #1d1910"><span style="color: #6f7580; flex: 0 0 auto">21:04:07</span><span style="flex: 0 0 48px; color: #e6b94a; font-weight: 600">WARN</span><span style="flex: 0 0 72px; color: #d7b8ff">5be07f13</span><span style="color: #f0dca8; overflow-wrap: anywhere">Download intercepted and quarantined: Scan_0412.zip</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:09</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #d7b8ff">5be07f13</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Viewport screenshot captured (1366×768)</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:11</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #d7b8ff">5be07f13</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Sniffer: 214 packets captured on eth0</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px; background: #22140f"><span style="color: #6f7580; flex: 0 0 auto">21:04:12</span><span style="flex: 0 0 48px; color: #f58b7d; font-weight: 600">ERROR</span><span style="flex: 0 0 72px; color: #d7b8ff">5be07f13</span><span style="color: #ffc4bb; overflow-wrap: anywhere">OCR failed on full-page image: image exceeds 16384 px height</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:14</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #b3bcff">a41c9e2b</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Analyst input: click (612, 388)</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:15</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #b3bcff">a41c9e2b</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Navigation → https://login-verify-account.co/step2</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:17</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #d7b8ff">5be07f13</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Building report: DNS, headers, certificate, links (29), scripts (8)</span></div>
+          <div class="ln" style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580; flex: 0 0 auto">21:04:18</span><span style="flex: 0 0 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="flex: 0 0 72px; color: #b3bcff">a41c9e2b</span><span style="color: #c4c8cf; overflow-wrap: anywhere">Recording MP4 segment 00:00–00:15</span></div>
+          <div style="display: flex; gap: 14px; padding: 3px 16px; color: #6f7580"><span style="flex: 0 0 auto">21:04:19</span><span class="pulse" style="width: 8px; height: 15px; background: #8e9bff"></span></div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px 16px; border-top: 1px solid #23262d; font-size: 12px; color: #868c97">
+          <span>14 lines · 1 warning · 1 error</span>
+          <span>Auto-scroll on — scroll up to pause</span>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

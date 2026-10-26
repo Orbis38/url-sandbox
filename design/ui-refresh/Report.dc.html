@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UrlProbe — Analysis Report</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1115}
+a{color:#b3bcff}a:hover{color:#d4d9ff}
+.ib:hover{background:#1c2140;border-color:#4f5fe6 !important;color:#d4d9ff !important}
+.tab:hover{color:#e6e8ec !important;background:#16181d !important}
+.tab:focus-visible,.ib:focus-visible,.more:focus-visible{outline:2px solid #8e9bff;outline-offset:2px}
+.more:hover{background:#1c2140 !important;color:#d4d9ff !important}
+.hop:hover{background:#171a20}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #e6e8ec; background: #0f1115; font-size: 13px; line-height: 1.5; display: flex; flex-wrap: wrap; min-height: 1240px">
+
+  <aside style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0b0d10; border-right: 1px solid #23262d; display: flex; flex-direction: column; gap: 4px; padding: 16px 12px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; text-decoration: none">
+      <img src="/_blob/76d2eba8fec46b1c50df29fdc61e9d03" alt="" style="width: 36px; height: 36px; border-radius: 9px">
+      <span style="display: flex; flex-direction: column; line-height: 1.2">
+        <span style="font-weight: 800; font-size: 15px; color: #e6e8ec">UrlProbe</span>
+        <span style="font-size: 10px; letter-spacing: 1.2px; color: #868c97; font-weight: 600">URL SANDBOX</span>
+      </span>
+    </a>
+    <a href="Main.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 9px; background: #4f5fe6; color: #ffffff; font-weight: 600; text-decoration: none; margin-bottom: 14px">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      New Analysis
+    </a>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97; padding: 8px 10px 4px">MONITOR</div>
+    <a href="Queue.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; background: #1c2140; color: #d4d9ff; text-decoration: none; font-weight: 600">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>
+      <span style="flex: 1">Task Queue</span>
+      <span style="font-size: 11px; font-weight: 700; color: #e6b94a; background: #2a2414; border-radius: 10px; padding: 1px 8px">2</span>
+    </a>
+    <a href="Logs.dc.html" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; color: #c4c8cf; text-decoration: none; font-weight: 500">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      Active Logs
+    </a>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97; padding: 14px 10px 4px">ACCOUNT</div>
+    <a href="ApiKeys.dc.html" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; color: #c4c8cf; text-decoration: none; font-weight: 500">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="m10.7 12.3 9.3-9.3M17 6l3 3M15 8l2 2"></path></svg>
+      API Keys
+    </a>
+    <div style="flex: 1; min-height: 24px"></div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 6px 0; border-top: 1px solid #23262d">
+      <span style="width: 30px; height: 30px; border-radius: 50%; background: #243246; color: #cfe3ff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">SO</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25">
+        <span style="font-weight: 600; font-size: 13px">soc-analyst</span>
+        <span style="font-size: 11px; color: #868c97">Analyst</span>
+      </span>
+      <a href="Login.dc.html" aria-label="Log out" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid #2a2e36; color: #a0a6b0; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+      </a>
+    </div>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+
+    <!-- Header: what was analyzed, one status, two actions -->
+    <header style="padding: 20px 32px 20px; border-bottom: 1px solid #23262d">
+      <nav aria-label="Breadcrumb" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #868c97; margin-bottom: 12px">
+        <a href="Queue.dc.html" style="color: #a0a6b0; text-decoration: none; font-weight: 600">Task Queue</a>
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+        <span style="font-family: 'IBM Plex Mono', monospace">{{taskId}}</span>
+      </nav>
+      <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px">
+        <div style="flex: 1 1 420px; min-width: 0">
+          <div style="display: flex; align-items: flex-start; gap: 10px">
+            <h1 title="{{target}}" style="margin: 0; min-width: 0; font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{target}}</h1>
+            <button type="button" aria-label="Copy target URL" class="ib" style="flex: 0 0 auto; width: 30px; height: 30px; border: 1px solid #2a2e36; border-radius: 7px; background: transparent; color: #a0a6b0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer">
+              <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"></path></svg>
+            </button>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; color: #a0a6b0">
+            <sc-if value="{{isOk}}" hint-placeholder-val="{{true}}">
+              <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #4fc98a; background: #142a1d; border-radius: 6px; padding: 2px 9px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #4fc98a"></span>Completed</span>
+            </sc-if>
+            <sc-if value="{{isFailed}}" hint-placeholder-val="{{false}}">
+              <span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #f58b7d; background: #2e1915; border-radius: 6px; padding: 2px 9px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f58b7d"></span>Failed</span>
+            </sc-if>
+            <span>26 Oct 2026, 20:51 UTC</span>
+            <span style="color: #4a4f59">•</span>
+            <span>ran {{duration}}</span>
+          </div>
+          <sc-if value="{{isFailed}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 10px 0 0; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #ffc4bb">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+              {{errorText}}
+            </p>
+          </sc-if>
+        </div>
+        <div style="display: flex; gap: 8px">
+          <a href="Logs.dc.html" class="ib" style="height: 36px; padding: 0 14px; border: 1px solid #2a2e36; border-radius: 8px; color: #c4c8cf; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center">View logs</a>
+          <a href="Report.dc.html" style="height: 36px; padding: 0 14px; border-radius: 8px; background: #4f5fe6; color: #ffffff; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>
+            Export JSON
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <div style="flex: 1; display: flex; flex-wrap: wrap; align-items: stretch">
+
+      <!-- Tabs + tab content: the tabs sit on this column only -->
+      <div style="flex: 999 1 520px; min-width: 0; box-sizing: border-box; padding: 16px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+        <div role="tablist" aria-label="Report sections" style="display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid #2a2e36">
+          <sc-for list="{{tabs}}" as="t" hint-placeholder-count="5">
+            <sc-if value="{{t.selected}}" hint-placeholder-val="{{false}}">
+              <button type="button" role="tab" aria-selected="true" style="height: 40px; padding: 0 14px; border: none; border-radius: 8px 8px 0 0; background: transparent; color: #e6e8ec; font: inherit; font-weight: 600; box-shadow: inset 0 -2px 0 #6f7df5; cursor: pointer; display: inline-flex; align-items: center; gap: 6px">{{t.label}}<span style="font-size: 11px; color: #b3bcff">{{t.count}}</span></button>
+            </sc-if>
+            <sc-if value="{{t.idle}}" hint-placeholder-val="{{true}}">
+              <button type="button" role="tab" aria-selected="false" class="tab" onClick="{{t.pick}}" style="height: 40px; padding: 0 14px; border: none; border-radius: 8px 8px 0 0; background: transparent; color: #a0a6b0; font: inherit; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px">{{t.label}}<span style="font-size: 11px; color: #868c97">{{t.count}}</span></button>
+            </sc-if>
+          </sc-for>
+        </div>
+
+        <div role="tabpanel" style="display: flex; flex-direction: column; gap: 20px">
+
+          <sc-if value="{{isOverview}}" hint-placeholder-val="{{true}}">
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; overflow: hidden">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px">
+                <h2 style="margin: 0; font-size: 15px; font-weight: 700">What the browser saw</h2>
+                <span style="font-size: 12px; color: #868c97; font-family: 'IBM Plex Mono', monospace">{{shotMeta}}</span>
+              </div>
+              <sc-if value="{{hasShot}}" hint-placeholder-val="{{true}}">
+                <div style="margin: 0 18px 18px; border: 1px solid #2a2e36; border-radius: 10px; overflow: hidden">
+                  <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #1d2026; border-bottom: 1px solid #2a2e36">
+                    <span style="width: 9px; height: 9px; border-radius: 50%; background: #3a3f49"></span>
+                    <span style="width: 9px; height: 9px; border-radius: 50%; background: #3a3f49"></span>
+                    <span style="width: 9px; height: 9px; border-radius: 50%; background: #3a3f49"></span>
+                    <span title="{{finalUrl}}" style="flex: 1; min-width: 0; margin-left: 8px; height: 22px; border-radius: 6px; background: #0f1115; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #a0a6b0; line-height: 22px; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{finalUrl}}</span>
+                  </div>
+                  <div role="img" aria-label="Screenshot placeholder: generic sign-in form captured from the target" style="height: 380px; background: #eef0f3; display: flex; align-items: center; justify-content: center">
+                    <div style="width: 300px; background: #ffffff; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.12); padding: 28px; display: flex; flex-direction: column; gap: 12px">
+                      <div style="width: 90px; height: 16px; background: #c9ced6; border-radius: 3px"></div>
+                      <div style="font-family: Inter, sans-serif; font-size: 20px; font-weight: 600; color: #1b1b1b">Sign in</div>
+                      <div style="height: 32px; border-bottom: 1px solid #8a8f98"></div>
+                      <div style="width: 140px; height: 10px; background: #d9dde3; border-radius: 3px"></div>
+                      <div style="align-self: flex-end; width: 90px; height: 32px; background: #3b6fd1; border-radius: 3px"></div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{noShot}}" hint-placeholder-val="{{false}}">
+                <div style="margin: 0 18px 18px; height: 220px; border: 1px dashed #353a44; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 0 24px">
+                  <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m3 4 18 16"></path></svg>
+                  <span style="font-weight: 600">No page was rendered</span>
+                  <span style="font-size: 12px; color: #868c97">The browser never got a response, so there is nothing to capture. Check Logs for the connection attempts.</span>
+                </div>
+              </sc-if>
+            </section>
+
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; overflow: hidden">
+              <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; padding: 16px 18px 12px">
+                <h2 style="margin: 0; font-size: 15px; font-weight: 700">How it got there</h2>
+                <span style="font-size: 12px; font-weight: 600; color: #868c97">{{chainSummary}}</span>
+              </div>
+
+              <sc-if value="{{hasHops}}" hint-placeholder-val="{{true}}">
+                <ol style="list-style: none; margin: 0; padding: 0 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">
+                  <sc-for list="{{headHops}}" as="h" hint-placeholder-count="3">
+                    <li class="hop" style="display: grid; grid-template-columns: 28px 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 18px; border-top: 1px solid #1f2228">
+                      <span style="color: #6f7580; text-align: right">{{h.n}}</span>
+                      <span style="font-weight: 600; color: {{h.color}}">{{h.code}}</span>
+                      <span title="{{h.url}}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{h.url}}</span>
+                      <span style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; color: #868c97">{{h.tag}}</span>
+                    </li>
+                  </sc-for>
+                  <sc-if value="{{collapsed}}" hint-placeholder-val="{{false}}">
+                    <li style="border-top: 1px solid #1f2228; padding: 4px 18px">
+                      <button type="button" class="more" onClick="{{expand}}" style="width: 100%; height: 34px; border: 1px dashed #353a44; border-radius: 8px; background: transparent; color: #b3bcff; font: inherit; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; cursor: pointer">Show {{hiddenCount}} intermediate hops</button>
+                    </li>
+                  </sc-if>
+                  <sc-for list="{{tailHops}}" as="h" hint-placeholder-count="0">
+                    <li class="hop" style="display: grid; grid-template-columns: 28px 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 18px; border-top: 1px solid #1f2228">
+                      <span style="color: #6f7580; text-align: right">{{h.n}}</span>
+                      <span style="font-weight: 600; color: {{h.color}}">{{h.code}}</span>
+                      <span title="{{h.url}}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{h.url}}</span>
+                      <span style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; color: #868c97">{{h.tag}}</span>
+                    </li>
+                  </sc-for>
+                  <sc-if value="{{canCollapse}}" hint-placeholder-val="{{false}}">
+                    <li style="border-top: 1px solid #1f2228; padding: 8px 18px 0">
+                      <button type="button" class="more" onClick="{{collapse}}" style="height: 30px; padding: 0 12px; border: 1px solid #2a2e36; border-radius: 7px; background: transparent; color: #c4c8cf; font: inherit; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; cursor: pointer">Collapse chain</button>
+                    </li>
+                  </sc-if>
+                </ol>
+              </sc-if>
+              <sc-if value="{{noHops}}" hint-placeholder-val="{{false}}">
+                <p style="margin: 0; padding: 12px 18px 18px; border-top: 1px solid #1f2228; font-size: 12px; color: #a0a6b0">No HTTP response was received, so there is no redirect chain.</p>
+              </sc-if>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{isNetwork}}" hint-placeholder-val="{{false}}">
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; overflow: hidden">
+              <h2 style="margin: 0; padding: 16px 18px 10px; font-size: 15px; font-weight: 700">DNS records</h2>
+              <table style="width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 12px">
+                <tbody>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #b3bcff; width: 60px">A</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228">104.21.48.199</td></tr>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #b3bcff">A</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228">172.67.161.23</td></tr>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #b3bcff">NS</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228">kia.ns.cloudflare.com</td></tr>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #b3bcff">MX</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228; color: #868c97">no record</td></tr>
+                </tbody>
+              </table>
+            </section>
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; overflow: hidden">
+              <h2 style="margin: 0; padding: 16px 18px 10px; font-size: 15px; font-weight: 700">Response headers</h2>
+              <table style="width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 12px">
+                <tbody>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #a0a6b0; width: 200px">server</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228">cloudflare</td></tr>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #a0a6b0">content-type</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228">text/html; charset=UTF-8</td></tr>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #a0a6b0">set-cookie</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228; overflow-wrap: anywhere">PHPSESSID=9b1f…; path=/</td></tr>
+                  <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #a0a6b0">x-powered-by</td><td style="padding: 8px 18px 8px 0; border-top: 1px solid #1f2228">PHP/8.1.29</td></tr>
+                </tbody>
+              </table>
+              <a href="Report.dc.html" style="display: block; padding: 10px 18px; border-top: 1px solid #1f2228; font-size: 12px; font-weight: 600; text-decoration: none">Show request headers</a>
+            </section>
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; padding: 16px 18px">
+              <h2 style="margin: 0 0 4px; font-size: 15px; font-weight: 700">Packet capture</h2>
+              <p style="margin: 0; font-size: 12px; color: #a0a6b0">214 packets · 6 remote hosts · capture saved with the task</p>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{isContent}}" hint-placeholder-val="{{false}}">
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; overflow: hidden">
+              <h2 style="margin: 0; padding: 16px 18px 10px; font-size: 15px; font-weight: 700">Extracted links <span style="font-size: 12px; font-weight: 600; color: #868c97">29</span></h2>
+              <div style="overflow-x: auto">
+                <table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 12px">
+                  <thead>
+                    <tr style="background: #121419">
+                      <th scope="col" style="text-align: left; padding: 8px 18px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97">URL</th>
+                      <th scope="col" style="text-align: left; padding: 8px 18px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97">FOUND IN</th>
+                    </tr>
+                  </thead>
+                  <tbody style="font-family: 'IBM Plex Mono', monospace">
+                    <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; overflow-wrap: anywhere">/common/oauth2/submit.php</td><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #a0a6b0">form action</td></tr>
+                    <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; overflow-wrap: anywhere">https://api.telegram.org/bot[REDACTED]/sendMessage</td><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #a0a6b0">inline script</td></tr>
+                    <tr><td style="padding: 8px 18px; border-top: 1px solid #1f2228; overflow-wrap: anywhere">https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js</td><td style="padding: 8px 18px; border-top: 1px solid #1f2228; color: #a0a6b0">script src</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; padding: 16px 18px">
+              <h2 style="margin: 0 0 10px; font-size: 15px; font-weight: 700">Text on the page (OCR)</h2>
+              <p style="margin: 0; padding: 12px 14px; background: #0c0e12; border: 1px solid #23262d; border-radius: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #c4c8cf">Sign in · Email, phone, or Skype · Can't access your account? · Next · Your invoice INV-2026-0412 is ready to view</p>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{isMedia}}" hint-placeholder-val="{{false}}">
+            <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; padding: 16px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px">
+              <div><div role="img" aria-label="Viewport screenshot thumbnail" style="height: 150px; border-radius: 10px; background: #eef0f3; border: 1px solid #2a2e36"></div><div style="font-weight: 600; margin-top: 8px">Viewport screenshot</div><div style="font-size: 12px; color: #868c97">1366×768 · JPEG</div></div>
+              <div><div style="height: 150px; border-radius: 10px; border: 1px dashed #353a44; display: flex; align-items: center; justify-content: center; color: #868c97; font-size: 12px">Not requested</div><div style="font-weight: 600; margin-top: 8px">Full-page screenshot</div><div style="font-size: 12px; color: #868c97">Enable it on New Analysis</div></div>
+              <div><div role="img" aria-label="Network graph thumbnail" style="height: 150px; border-radius: 10px; background: #121419; border: 1px solid #2a2e36"></div><div style="font-weight: 600; margin-top: 8px">Network graph</div><div style="font-size: 12px; color: #868c97">6 hosts</div></div>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{isLogs}}" hint-placeholder-val="{{false}}">
+            <section style="background: #0b0d10; border: 1px solid #2a2e36; border-radius: 14px; padding: 10px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.6">
+              <div style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580">20:51:02</span><span style="width: 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="color: #c4c8cf">Task picked up by worker-1</span></div>
+              <div style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580">20:51:04</span><span style="width: 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="color: #c4c8cf">Tor circuit rotated</span></div>
+              <div style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580">20:51:09</span><span style="width: 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="color: #c4c8cf">Navigation started</span></div>
+              <div style="display: flex; gap: 14px; padding: 3px 16px"><span style="color: #6f7580">20:51:58</span><span style="width: 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="color: #c4c8cf">Report generated</span></div>
+            </section>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- Persistent run details: a fixed rail, not a tab card -->
+      <aside aria-label="Run details" style="flex: 1 1 300px; max-width: 100%; min-width: 0; box-sizing: border-box; background: #121419; border-left: 1px solid #23262d">
+        <div style="display: flex; align-items: center; height: 57px; box-sizing: border-box; padding: 16px 20px 0; border-bottom: 1px solid #23262d">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #a0a6b0">RUN DETAILS</span>
+        </div>
+        <section style="padding: 16px 20px">
+          <h2 style="margin: 0 0 8px; font-size: 13px; font-weight: 700">Summary</h2>
+          <dl style="margin: 0; display: flex; flex-direction: column">
+            <div style="padding: 8px 0; border-bottom: 1px solid #1f2228"><dt style="font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97">FINAL URL</dt><dd title="{{finalUrl}}" style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden">{{finalUrl}}</dd></div>
+            <div style="padding: 8px 0; border-bottom: 1px solid #1f2228; display: flex; justify-content: space-between; gap: 12px"><dt style="color: #a0a6b0; flex: 0 0 auto">HTTP status</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{httpStatus}}</dd></div>
+            <div style="padding: 8px 0; border-bottom: 1px solid #1f2228; display: flex; justify-content: space-between; gap: 12px"><dt style="color: #a0a6b0; flex: 0 0 auto">Redirects</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{redirectCount}}</dd></div>
+            <div style="padding: 8px 0; border-bottom: 1px solid #1f2228; display: flex; justify-content: space-between; gap: 12px"><dt style="color: #a0a6b0; flex: 0 0 auto">Resolved IP</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{ip}}</dd></div>
+            <div style="padding: 8px 0; border-bottom: 1px solid #1f2228; display: flex; justify-content: space-between; gap: 12px"><dt style="color: #a0a6b0; flex: 0 0 auto">Page title</dt><dd title="{{pageTitle}}" style="margin: 0; min-width: 0; text-align: right; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere">{{pageTitle}}</dd></div>
+            <div style="padding: 8px 0; border-bottom: 1px solid #1f2228; display: flex; justify-content: space-between; gap: 12px"><dt style="color: #a0a6b0; flex: 0 0 auto">Certificate</dt><dd style="margin: 0; text-align: right">{{cert}}<sc-if value="{{hasCertNote}}" hint-placeholder-val="{{true}}"><span style="display: block; color: #e6b94a; font-size: 12px">{{certNote}}</span></sc-if></dd></div>
+            <div style="padding: 8px 0; display: flex; justify-content: space-between; gap: 12px"><dt style="color: #a0a6b0; flex: 0 0 auto">Egress</dt><dd style="margin: 0">Tor</dd></div>
+          </dl>
+        </section>
+
+        <section style="padding: 16px 20px; border-top: 1px solid #23262d">
+          <h2 style="margin: 0 0 10px; font-size: 13px; font-weight: 700">Captured in this run</h2>
+          <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+            <li style="display: flex; align-items: center; gap: 10px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4fc98a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Viewport screenshot</li>
+            <li style="display: flex; align-items: center; gap: 10px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4fc98a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Packet capture</li>
+            <li style="display: flex; align-items: center; gap: 10px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4fc98a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Cookie banners dismissed</li>
+            <li style="display: flex; align-items: center; gap: 10px; color: #868c97"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"></path></svg>Full-page screenshot</li>
+            <li style="display: flex; align-items: center; gap: 10px; color: #868c97"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"></path></svg>Live session recording</li>
+          </ul>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">Chrome 129 / Win10 · timeouts 30 / 60 s</div>
+        </section>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"scenario":{"editor":"enum","options":["Typical","20 redirects","Very long URLs","Failed task"],"default":"Typical","section":"Edge cases"},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'overview', expanded: false };
+  }
+  componentDidUpdate(prev) {
+    if (prev.scenario !== this.props.scenario && this.state.expanded) this.setState({ expanded: false });
+  }
+  scenarioData(sc) {
+    const final = 'https://auth-o365-secure.app/common/oauth2/login';
+    if (sc === '20 redirects') {
+      const hosts = ['t.co', 'l.facebook.com', 'click.mailtrack.io', 'r.sendgrid.net', 'bit.ly', 'tinyurl.com', 'track.adform.net', 'go.redirectingat.com', 'cutt.ly', 'rb.gy'];
+      const codes = [301, 302, 302, 307, 301, 302, 302, 301, 302, 307];
+      const urls = ['https://t.co/Xa81kLq9Zp'];
+      const hopCodes = [];
+      for (let i = 1; i < 20; i++) {
+        const h = hosts[i % hosts.length];
+        urls.push('https://' + h + '/r/' + (7300 + i * 37).toString(36) + '?u=' + (i * 9113).toString(16));
+      }
+      urls.push(final);
+      for (let i = 0; i < 20; i++) hopCodes.push(codes[i % codes.length]);
+      hopCodes.push(200);
+      return { target: urls[0], urls: urls, codes: hopCodes, final: final, status: 'ok', duration: '1:47',
+        title: 'Sign in to your account', cert: "Let's Encrypt R11", certNote: 'issued 2 days ago', ip: '104.21.48.199' };
+    }
+    if (sc === 'Very long URLs') {
+      const t = 'https://docs-sharepoint-view.net/sites/finance-shared/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2Ffinance-shared%2FShared%20Documents%2FInvoices%2F2026%2FQ4%2FINV-2026-0412-PAYMENT-REQUIRED-URGENT.html&parent=%2Fsites%2Ffinance-shared&utm_source=mail&utm_medium=email&utm_campaign=q4-invoices&session=8f2a91c0d4e7b3a6f1e9c2d5b8a7f4e3c6d9b2a5e8f1c4d7';
+      const f = 'https://auth-o365-secure.app/common/oauth2/v2.0/authorize?client_id=4765445b-32c6-49b0-83e6-1d93765276ca&redirect_uri=https%3A%2F%2Fauth-o365-secure.app%2Fcallback&response_type=code%20id_token&scope=openid%20profile%20offline_access&response_mode=form_post&nonce=638655112348812390.YzQ2MjNkOTEtNWE4Yi00ZjI3&state=CfDJ8Oq3k2vVxNQ';
+      return { target: t, urls: [t, 'https://auth-o365-secure.app/?r=inv&ref=' + 'a8f3c1'.repeat(12), f], codes: [302, 301, 200], final: f, status: 'ok', duration: '0:58',
+        title: 'Sign in to your Microsoft 365 account to view the shared invoice document INV-2026-0412 — action required within 24 hours to avoid suspension',
+        cert: "Let's Encrypt R11", certNote: 'issued 2 days ago', ip: '104.21.48.199' };
+    }
+    if (sc === 'Failed task') {
+      return { target: 'http://185.220.101.47:8080/panel/gate.php', urls: [], codes: [], final: '—', status: 'failed', duration: '0:07',
+        error: 'Connection refused by 185.220.101.47:8080 after 3 attempts',
+        title: '—', cert: 'None (plain HTTP)', certNote: '', ip: '185.220.101.47' };
+    }
+    return { target: 'docs-sharepoint-view.net/file/inv_2026.html',
+      urls: ['https://docs-sharepoint-view.net/file/inv_2026.html', 'https://auth-o365-secure.app/?r=inv', final], codes: [302, 301, 200],
+      final: final, status: 'ok', duration: '0:58', title: 'Sign in to your account', cert: "Let's Encrypt R11", certNote: 'issued 2 days ago', ip: '104.21.48.199' };
+  }
+  renderVals() {
+    const tab = this.state.tab;
+    const d = this.scenarioData(this.props.scenario ?? 'Typical');
+    const last = d.urls.length - 1;
+    const hops = d.urls.map((u, i) => ({
+      n: String(i + 1),
+      code: String(d.codes[i]),
+      url: u,
+      color: d.codes[i] === 200 ? '#4fc98a' : '#e6b94a',
+      tag: i === 0 ? 'submitted' : (i === last ? 'final' : '')
+    }));
+    const long = hops.length > 6;
+    const collapsed = long && !this.state.expanded;
+    const domains = new Set(d.urls.map((u) => { try { return new URL(u).host; } catch (e) { return u; } })).size;
+    const redirects = Math.max(hops.length - 1, 0);
+    let chainSummary = 'no response';
+    if (hops.length) chainSummary = redirects + (redirects === 1 ? ' redirect' : ' redirects') + ' · ' + domains + (domains === 1 ? ' domain' : ' domains');
+    const defs = [
+      { id: 'overview', label: 'Overview', count: '' },
+      { id: 'network', label: 'Network', count: '12' },
+      { id: 'content', label: 'Content', count: '37' },
+      { id: 'media', label: 'Media', count: '2' },
+      { id: 'logs', label: 'Logs', count: '' }
+    ];
+    const failed = d.status === 'failed';
+    return {
+      tabs: defs.map((t) => ({ label: t.label, count: t.count, selected: t.id === tab, idle: t.id !== tab, pick: () => this.setState({ tab: t.id }) })),
+      isOverview: tab === 'overview', isNetwork: tab === 'network', isContent: tab === 'content', isMedia: tab === 'media', isLogs: tab === 'logs',
+      taskId: failed ? '19aa6c3e' : 'e3f1b870',
+      target: d.target, duration: d.duration, errorText: d.error || '',
+      isOk: !failed, isFailed: failed,
+      hasShot: !failed, noShot: failed,
+      shotMeta: failed ? 'not captured' : 'viewport · 1366×768',
+      finalUrl: d.final,
+      hasHops: hops.length > 0, noHops: hops.length === 0,
+      headHops: collapsed ? hops.slice(0, 2) : hops,
+      tailHops: collapsed ? hops.slice(-2) : [],
+      collapsed: collapsed, canCollapse: long && this.state.expanded,
+      hiddenCount: String(hops.length - 4),
+      expand: () => this.setState({ expanded: true }),
+      collapse: () => this.setState({ expanded: false }),
+      chainSummary: chainSummary,
+      httpStatus: failed ? '—' : '200 OK',
+      redirectCount: failed ? '—' : String(redirects),
+      ip: d.ip, pageTitle: d.title, cert: d.cert, certNote: d.certNote, hasCertNote: !!d.certNote
+    };
+  }
+}
+</script>
+</body>
+</html>

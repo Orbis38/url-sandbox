@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UrlProbe — Sign in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1115}
+a{color:#b3bcff}a:hover{color:#d4d9ff}
+.fx:focus{border-color:#4f5fe6 !important;box-shadow:0 0 0 3px rgba(79,95,230,.25)}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #e6e8ec; background: #0f1115; font-size: 13px; line-height: 1.5; min-height: 900px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 48px 16px">
+
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
+    <img src="/_blob/76d2eba8fec46b1c50df29fdc61e9d03" alt="UrlProbe" style="width: 56px; height: 56px; border-radius: 14px">
+    <div>
+      <div style="font-size: 22px; font-weight: 800; letter-spacing: -.3px">UrlProbe</div>
+      <div style="font-size: 13px; color: #a0a6b0">Isolated URL detonation for security analysts</div>
+    </div>
+  </div>
+
+  <form style="width: 100%; max-width: 380px; box-sizing: border-box; background: #16181d; border: 1px solid #2a2e36; border-radius: 16px; padding: 28px; display: flex; flex-direction: column; gap: 16px">
+    <h1 style="margin: 0; font-size: 17px; font-weight: 700">Sign in</h1>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="user" style="font-size: 12px; font-weight: 600; color: #a0a6b0">Username</label>
+      <input id="user" class="fx" type="text" autocomplete="username" value="soc-analyst" style="height: 42px; padding: 0 12px; background: #0c0e12; border: 1px solid #2f343d; border-radius: 9px; color: #e6e8ec; font: inherit; outline: none">
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="pass" style="font-size: 12px; font-weight: 600; color: #a0a6b0">Password</label>
+      <input id="pass" class="fx" type="password" autocomplete="current-password" value="correcthorse" aria-describedby="pass-err" style="height: 42px; padding: 0 12px; background: #0c0e12; border: 1px solid #8a3d33; border-radius: 9px; color: #e6e8ec; font: inherit; outline: none">
+      <span id="pass-err" style="font-size: 12px; color: #f58b7d; display: flex; align-items: center; gap: 6px">
+        <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+        Wrong username or password.
+      </span>
+    </div>
+
+    <a href="Main.dc.html" style="height: 44px; border-radius: 10px; background: #4f5fe6; color: #ffffff; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; margin-top: 4px">Sign in</a>
+
+    <p style="margin: 0; text-align: center; font-size: 12px; color: #868c97">No account? <a href="Login.dc.html" style="font-weight: 600; text-decoration: none">Register</a></p>
+  </form>
+
+  <p style="margin: 0; font-size: 12px; color: #6f7580; display: flex; align-items: center; gap: 6px">
+    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+    Each analyst sees only their own tasks, reports and API keys.
+  </p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

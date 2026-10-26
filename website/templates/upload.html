@@ -1,112 +1,147 @@
 {% extends 'admin/master.html' %}
+{% block page_subtitle %}<p class="up-topbar-sub">Detonate a suspicious URL inside a disposable, isolated browser.</p>{% endblock %}
+{% block page_actions %}
+<a href="/queue/" class="up-btn up-btn-ghost">
+   <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+   Open Task Queue
+</a>
+{% endblock %}
 {% block body %}
 {{ super() }}
-{% set switch_desc = {
-   'use_proxy': 'Route traffic through Tor network with fresh IP rotation per run',
-   'no_redirect': 'Capture the first response only, no follow-through',
-   'take_screenshot': 'Capture standard viewport screenshot of the target',
-   'take_full_screenshot': 'Capture full-page scrolling screenshot of the target',
-   'sniffer_on': 'Capture raw packet-level network traffic (Scapy) on the network interface',
-   'interactive': 'Full real-time interactive browser session (30 FPS, scroll, click, type)',
-   'record_vnc': 'Record MP4 video of the interactive VNC session for replay in the report',
-   'block_cookies': 'Auto-dismiss cookie consent banners so they stay out of the screenshot'
+{% set switch_info = {
+   'use_proxy': ('Route through Tor', 'Fresh exit IP per run, hides the analyst\'s origin from the target'),
+   'no_redirect': ('Don\'t follow redirects', 'Capture the first response only'),
+   'take_screenshot': ('Viewport screenshot', 'Standard capture of the landing page'),
+   'take_full_screenshot': ('Full-page screenshot', 'Scrolling capture of the entire document'),
+   'sniffer_on': ('Packet capture', 'Raw packet-level traffic on the sandbox interface (Scapy)'),
+   'block_cookies': ('Dismiss cookie banners', 'Keeps consent overlays out of the screenshot'),
+   'interactive': ('Live browser session', 'Drive the sandboxed browser in real time — 30 fps, scroll, click, type'),
+   'record_vnc': ('Record session as MP4', 'Requires a live browser session')
 } %}
-<div class="up-submit-grid">
-   <div class="card new_card">
-      <div class="card-header">
-         <div class="div-left">{{ header }}</div>
-         <div class="div-right"></div>
-      </div>
-      <div class="card-body">
-         <form method="POST" action="" enctype="multipart/form-data">
-            <div class="up-field-label">Target URL</div>
-            {{ form.buffer(placeholder="https://example.com") }}
-            <div class="up-divider"></div>
-            <div class="up-field-label">Execution options</div>
-            {% for subfield in form.choices %}
-            <label class="up-toggle-row">
-               <span>
-                  <span class="up-toggle-name">{{ subfield.label.text }}</span>
-                  <span class="up-toggle-desc">{{ switch_desc.get(subfield.data, '') }}</span>
+{% set groups = [
+   ('Network', ['use_proxy', 'no_redirect']),
+   ('Capture', ['take_screenshot', 'take_full_screenshot', 'sniffer_on', 'block_cookies']),
+   ('Interactive', ['interactive', 'record_vnc'])
+] %}
+{% set switches = {} %}
+{% for subfield in form.choices %}{% set _ = switches.update({subfield.data: subfield}) %}{% endfor %}
+<div class="up-page">
+   <div class="up-cols">
+      <form method="POST" action="" enctype="multipart/form-data" class="up-card up-col-main">
+         <div class="up-card-body" style="padding: 24px 24px 20px">
+            <label for="buffer" class="up-field-label up-field-label-lg">Target URL</label>
+            <div class="up-input-icon">
+               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+               {{ form.buffer(placeholder="https://example.com", rows=2, spellcheck="false", autocomplete="off") }}
+            </div>
+            <p class="up-hint">
+               <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+               The page is opened only inside the sandbox — never on your workstation.
+            </p>
+         </div>
+
+         {% for group_name, keys in groups %}
+         <fieldset class="up-card-section" style="margin: 0; min-width: 0">
+            <legend class="up-overline" style="border: none; margin: 0 0 4px; width: auto; float: left">{{ group_name }}</legend>
+            <div style="clear: both">
+            {% for key in keys if key in switches %}
+            {% set subfield = switches[key] %}
+            <label class="up-switch-row{% if key == 'record_vnc' %} up-switch-child{% endif %}" for="{{ subfield.id }}">
+               <span class="up-switch-text">
+                  <span class="up-switch-name">{{ switch_info[key][0] }}</span>
+                  <span class="up-switch-desc">{{ switch_info[key][1] }}</span>
                </span>
-               {{ subfield }}
-               <span class="up-switch-track"><span class="up-switch-knob"></span></span>
+               {{ subfield(class_='up-switch') }}
             </label>
             {% endfor %}
-            <div class="up-divider"></div>
-            <div class="up-field-label">Advanced</div>
+            </div>
+         </fieldset>
+         {% endfor %}
+
+         <details class="up-details" style="border-top: 1px solid var(--up-border-soft)">
+            <summary>
+               <svg class="up-chev" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a0a6b0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+               <span style="font-weight: 600">Advanced settings</span>
+               <span class="up-mono" style="margin-left: auto; font-size: 12px; color: var(--up-muted)">{{ form.useragents.data }} · {{ form.urltimeout.data }}s / {{ form.analyzertimeout.data }}s / {{ form.interactivetimeout.data }}s</span>
+            </summary>
             <div class="up-adv-grid">
-               <div>
-                  <div class="up-field-label">User agent</div>
+               <div class="up-span-2">
+                  <label for="useragents" class="up-field-label">User agent</label>
                   {{ form.useragents }}
                </div>
                <div>
-                  <div class="up-field-label">URL timeout</div>
+                  <label for="urltimeout" class="up-field-label">URL timeout</label>
                   {{ form.urltimeout }}
                </div>
                <div>
-                  <div class="up-field-label">Analyzer timeout</div>
+                  <label for="analyzertimeout" class="up-field-label">Analyzer timeout</label>
                   {{ form.analyzertimeout }}
                </div>
                <div>
-                  <div class="up-field-label">Interactive timeout</div>
+                  <label for="interactivetimeout" class="up-field-label">Interactive timeout</label>
                   {{ form.interactivetimeout }}
                </div>
             </div>
-            <div class="up-actions">
-               {{ form.submit }}
-               {{ form.submitandwait }}
-            </div>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-         </form>
-      </div>
-   </div>
-   <div class="card new_card">
-      <div class="card-header">
-         <div class="div-left">What happens next</div>
-         <div class="div-right"></div>
-      </div>
-      <div class="card-body">
-         <div class="up-step">
-            <div class="up-step-n">1</div>
-            <div>
-               <div class="up-step-title">Isolated execution</div>
-               <div class="up-step-desc">The target opens inside a disposable sandboxed browser.</div>
-            </div>
+         </details>
+
+         <div class="up-card-foot">
+            {{ form.submit }}
+            {{ form.submitandwait }}
+            <span style="margin-left: auto; font-size: 12px; color: var(--up-muted)">The task appears in Task Queue as soon as it's submitted.</span>
          </div>
-         <div class="up-step">
-            <div class="up-step-n">2</div>
-            <div>
-               <div class="up-step-title">Traffic captured</div>
-               <div class="up-step-desc">DNS, headers, certificates and network calls are recorded.</div>
+         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      </form>
+
+      <div class="up-col-side">
+         <section class="up-card" style="padding: 22px 24px">
+            <h2 class="up-card-title" style="margin-bottom: 18px">What happens next</h2>
+            <ol class="up-steps">
+               <li class="up-step">
+                  <span class="up-step-rail"><span class="up-step-n">1</span><span class="up-step-line"></span></span>
+                  <span class="up-step-body"><span class="up-step-title">Isolated execution</span><span class="up-step-desc">The target opens in a disposable container with a hardened browser.</span></span>
+               </li>
+               <li class="up-step">
+                  <span class="up-step-rail"><span class="up-step-n">2</span><span class="up-step-line"></span></span>
+                  <span class="up-step-body"><span class="up-step-title">Traffic captured</span><span class="up-step-desc">DNS, headers, TLS certificate, scripts and outbound calls are recorded.</span></span>
+               </li>
+               <li class="up-step">
+                  <span class="up-step-rail"><span class="up-step-n">3</span><span class="up-step-line"></span></span>
+                  <span class="up-step-body"><span class="up-step-title">Artifacts parsed</span><span class="up-step-desc">Screenshots, OCR text, links and the network graph are structured.</span></span>
+               </li>
+               <li class="up-step">
+                  <span class="up-step-rail"><span class="up-step-n is-done"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></span>
+                  <span class="up-step-body"><span class="up-step-title">Report ready</span><span class="up-step-desc">Open it from Task Queue, or export it as JSON.</span></span>
+               </li>
+            </ol>
+         </section>
+
+         <section class="up-card">
+            <div class="up-card-head" style="padding: 18px 24px 12px">
+               <h2 class="up-card-title">Recent analyses</h2>
+               <a href="/queue/" style="font-size: 12px; font-weight: 600">View all</a>
             </div>
-         </div>
-         <div class="up-step">
-            <div class="up-step-n">3</div>
-            <div>
-               <div class="up-step-title">Report generated</div>
-               <div class="up-step-desc">The output is parsed and structured into useful categories.</div>
-            </div>
-         </div>
-         <div class="up-step">
-            <div class="up-step-n">4</div>
-            <div>
-               <div class="up-step-title">Report ready</div>
-               <div class="up-step-desc">The full report appears under All Reports when the task completes.</div>
-            </div>
-         </div>
+            <ul class="up-recent">
+               {% for t in recent or [] %}
+               <li>
+                  <a href="{{ '/report/' ~ t.task if t.status in ['completed', 'failed', 'timed_out', 'interrupted'] else '/tasklog/' ~ t.task }}">
+                     <span class="up-target-url" title="{{ t.target }}"><span class="up-target-host">{{ t.host }}</span><span class="up-target-rest">{{ t.rest }}</span></span>
+                     <span class="up-pill up-pill-{{ t.status }}">{{ t.status_label }}</span>
+                  </a>
+               </li>
+               {% else %}
+               <li class="up-empty" style="padding: 12px 24px 20px !important; text-align: left">No analyses yet — your first one will show up here.</li>
+               {% endfor %}
+            </ul>
+         </section>
       </div>
    </div>
 </div>
-<div class="up-result-wrap" style="display:none">
-   <div class="card new_card">
-      <div class="card-header">
-         <div class="div-left">Analysis Report</div>
-         <div class="div-right"></div>
-      </div>
-      <div class="card-body width100 task-details">
+<div class="up-result-wrap up-page" style="display:none">
+   <section class="up-card">
+      <div class="up-card-head"><h2 class="up-card-title">Analysis Report</h2></div>
+      <div class="up-card-body task-details" style="display: flex; flex-direction: column; gap: 16px">
          {{- switches_details | safe -}}
       </div>
-   </div>
+   </section>
 </div>
 {% endblock body %}

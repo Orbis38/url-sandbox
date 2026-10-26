@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UrlProbe — Task Queue</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1115}
+a{color:#b3bcff}a:hover{color:#d4d9ff}
+.fx:focus{border-color:#4f5fe6 !important;box-shadow:0 0 0 3px rgba(79,95,230,.25)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.pulse{animation:pulse 1.4s ease-in-out infinite}
+.qrow:hover{background:#1b1e24}
+.ib:hover{background:#1c2140;border-color:#4f5fe6 !important;color:#d4d9ff !important}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #e6e8ec; background: #0f1115; font-size: 13px; line-height: 1.5; display: flex; flex-wrap: wrap; min-height: 980px">
+
+  <aside style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0b0d10; border-right: 1px solid #23262d; display: flex; flex-direction: column; gap: 4px; padding: 16px 12px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; text-decoration: none">
+      <img src="/_blob/76d2eba8fec46b1c50df29fdc61e9d03" alt="" style="width: 36px; height: 36px; border-radius: 9px">
+      <span style="display: flex; flex-direction: column; line-height: 1.2">
+        <span style="font-weight: 800; font-size: 15px; color: #e6e8ec">UrlProbe</span>
+        <span style="font-size: 10px; letter-spacing: 1.2px; color: #868c97; font-weight: 600">URL SANDBOX</span>
+      </span>
+    </a>
+    <a href="Main.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 9px; background: #4f5fe6; color: #ffffff; font-weight: 600; text-decoration: none; margin-bottom: 14px">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      New Analysis
+    </a>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97; padding: 8px 10px 4px">MONITOR</div>
+    <a href="Queue.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; background: #1c2140; color: #d4d9ff; text-decoration: none; font-weight: 600">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>
+      <span style="flex: 1">Task Queue</span>
+      <span style="font-size: 11px; font-weight: 700; color: #e6b94a; background: #2a2414; border-radius: 10px; padding: 1px 8px">2</span>
+    </a>
+    <a href="Logs.dc.html" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; color: #c4c8cf; text-decoration: none; font-weight: 500">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      Active Logs
+    </a>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97; padding: 14px 10px 4px">ACCOUNT</div>
+    <a href="ApiKeys.dc.html" style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 8px; color: #c4c8cf; text-decoration: none; font-weight: 500">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"></circle><path d="m10.7 12.3 9.3-9.3M17 6l3 3M15 8l2 2"></path></svg>
+      API Keys
+    </a>
+    <div style="flex: 1; min-height: 24px"></div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 6px 0; border-top: 1px solid #23262d">
+      <span style="width: 30px; height: 30px; border-radius: 50%; background: #243246; color: #cfe3ff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">SO</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25">
+        <span style="font-weight: 600; font-size: 13px">soc-analyst</span>
+        <span style="font-size: 11px; color: #868c97">Analyst</span>
+      </span>
+      <a href="Login.dc.html" aria-label="Log out" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid #2a2e36; color: #a0a6b0; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+      </a>
+    </div>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 32px; border-bottom: 1px solid #23262d">
+      <div>
+        <h1 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.2px; display: flex; align-items: center; gap: 10px">Task Queue
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #4fc98a; background: #142a1d; border-radius: 20px; padding: 2px 10px"><span class="pulse" style="width: 7px; height: 7px; border-radius: 50%; background: #4fc98a"></span>LIVE</span>
+        </h1>
+        <p style="margin: 2px 0 0; color: #a0a6b0">Every analysis you submitted, newest first. Only your own tasks are listed.</p>
+      </div>
+      <a href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; background: #4f5fe6; color: #ffffff; text-decoration: none; font-weight: 600">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+        New Analysis
+      </a>
+    </header>
+
+    <div style="padding: 28px 32px 40px; max-width: 1280px; box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 24px">
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px">
+        <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 12px; padding: 18px 20px">
+          <div style="display: flex; align-items: center; justify-content: space-between; color: #a0a6b0; font-size: 12px; font-weight: 600">Total analyses
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"></path></svg>
+          </div>
+          <div style="font-size: 28px; font-weight: 800; letter-spacing: -.5px; margin-top: 6px">248</div>
+          <div style="font-size: 12px; color: #868c97">last 60 days (retention window)</div>
+        </div>
+        <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 12px; padding: 18px 20px">
+          <div style="display: flex; align-items: center; justify-content: space-between; color: #a0a6b0; font-size: 12px; font-weight: 600">Running now
+            <span class="pulse" style="width: 8px; height: 8px; border-radius: 50%; background: #e6b94a"></span>
+          </div>
+          <div style="font-size: 28px; font-weight: 800; letter-spacing: -.5px; margin-top: 6px; color: #e6b94a">2</div>
+          <div style="font-size: 12px; color: #868c97">of 5 sandbox slots</div>
+        </div>
+        <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 12px; padding: 18px 20px">
+          <div style="display: flex; align-items: center; justify-content: space-between; color: #a0a6b0; font-size: 12px; font-weight: 600">Queued
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+          </div>
+          <div style="font-size: 28px; font-weight: 800; letter-spacing: -.5px; margin-top: 6px">1</div>
+          <div style="font-size: 12px; color: #868c97">waiting for a free slot</div>
+        </div>
+        <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 12px; padding: 18px 20px">
+          <div style="display: flex; align-items: center; justify-content: space-between; color: #a0a6b0; font-size: 12px; font-weight: 600">Finished
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4fc98a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+          </div>
+          <div style="font-size: 28px; font-weight: 800; letter-spacing: -.5px; margin-top: 6px; color: #4fc98a">239</div>
+          <div style="font-size: 12px; color: #868c97">6 failed or timed out</div>
+        </div>
+      </div>
+
+      <section style="background: #16181d; border: 1px solid #2a2e36; border-radius: 14px; overflow: hidden">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #23262d">
+          <div role="group" aria-label="Filter by status" style="display: flex; flex-wrap: wrap; gap: 2px; background: #0c0e12; border: 1px solid #23262d; border-radius: 9px; padding: 3px">
+            <button type="button" aria-pressed="true" style="height: 30px; padding: 0 12px; border: none; border-radius: 6px; background: #23262d; color: #e6e8ec; font: inherit; font-weight: 600; cursor: pointer">All</button>
+            <button type="button" aria-pressed="false" style="height: 30px; padding: 0 12px; border: none; border-radius: 6px; background: transparent; color: #a0a6b0; font: inherit; font-weight: 600; cursor: pointer">Running</button>
+            <button type="button" aria-pressed="false" style="height: 30px; padding: 0 12px; border: none; border-radius: 6px; background: transparent; color: #a0a6b0; font: inherit; font-weight: 600; cursor: pointer">Queued</button>
+            <button type="button" aria-pressed="false" style="height: 30px; padding: 0 12px; border: none; border-radius: 6px; background: transparent; color: #a0a6b0; font: inherit; font-weight: 600; cursor: pointer">Completed</button>
+            <button type="button" aria-pressed="false" style="height: 30px; padding: 0 12px; border: none; border-radius: 6px; background: transparent; color: #a0a6b0; font: inherit; font-weight: 600; cursor: pointer">Problems</button>
+          </div>
+          <div style="position: relative; margin-left: auto; flex: 0 1 300px; min-width: 200px">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round" style="position: absolute; left: 12px; top: 11px"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+            <label for="q" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Filter tasks</label>
+            <input id="q" class="fx" type="search" placeholder="Filter by target or task ID" style="width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px 0 34px; background: #0c0e12; border: 1px solid #2f343d; border-radius: 8px; color: #e6e8ec; font: inherit; outline: none">
+          </div>
+        </div>
+
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 860px; border-collapse: collapse">
+            <thead>
+              <tr style="background: #121419">
+                <th scope="col" style="text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97; border-bottom: 1px solid #23262d">TARGET</th>
+                <th scope="col" style="text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97; border-bottom: 1px solid #23262d">TYPE</th>
+                <th scope="col" style="text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97; border-bottom: 1px solid #23262d">STATUS</th>
+                <th scope="col" style="text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97; border-bottom: 1px solid #23262d">SUBMITTED</th>
+                <th scope="col" style="text-align: right; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97; border-bottom: 1px solid #23262d">DURATION</th>
+                <th scope="col" style="text-align: right; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: .6px; color: #868c97; border-bottom: 1px solid #23262d">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">bit.ly</span><span style="color: #868c97">/3xQz9Lk</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">a41c9e2b</div></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; color: #a0a6b0">URL · Interactive</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #e6b94a; background: #2a2414; border-radius: 6px; padding: 3px 10px"><span class="pulse" style="width: 6px; height: 6px; border-radius: 50%; background: #e6b94a"></span>Running</span></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 21:04</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right">0:41</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; text-align: right; white-space: nowrap">
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Live logs</a>
+                </td>
+              </tr>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">wetransfer-files.download</span><span style="color: #868c97">/d/7Hk2</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">5be07f13</div></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; color: #a0a6b0">URL</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #e6b94a; background: #2a2414; border-radius: 6px; padding: 3px 10px"><span class="pulse" style="width: 6px; height: 6px; border-radius: 50%; background: #e6b94a"></span>Running</span></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 21:03</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right">1:12</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; text-align: right; white-space: nowrap">
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Live logs</a>
+                </td>
+              </tr>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">invoice-portal.biz</span><span style="color: #868c97">/pay?id=99120</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">c90d1a44</div></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; color: #a0a6b0">URL</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #b6c2d4; background: #222833; border-radius: 6px; padding: 3px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #b6c2d4"></span>Queued</span></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 21:03</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right; color: #6f7580">—</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; text-align: right; white-space: nowrap">
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Logs</a>
+                </td>
+              </tr>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">docs-sharepoint-view.net</span><span style="color: #868c97">/file/inv_2026.html</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">e3f1b870</div></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; color: #a0a6b0">URL</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #4fc98a; background: #142a1d; border-radius: 6px; padding: 3px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #4fc98a"></span>Completed</span></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 20:51</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right">0:58</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; text-align: right; white-space: nowrap">
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #353b70; background: #181c33; border-radius: 7px; color: #c9cfff; text-decoration: none; font-size: 12px; font-weight: 600">Report</a>
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">JSON</a>
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Logs</a>
+                </td>
+              </tr>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">dhl-parcel-redelivery.info</span><span style="color: #868c97">/track</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">7d22c0f9</div></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; color: #a0a6b0">URL</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #f0a060; background: #2e2015; border-radius: 6px; padding: 3px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f0a060"></span>Timed out</span></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 20:37</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right">1:00</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; text-align: right; white-space: nowrap">
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #353b70; background: #181c33; border-radius: 7px; color: #c9cfff; text-decoration: none; font-size: 12px; font-weight: 600">Report</a>
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">JSON</a>
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Logs</a>
+                </td>
+              </tr>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">185.220.101.47</span><span style="color: #868c97">:8080/panel/gate.php</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">19aa6c3e</div></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; color: #a0a6b0">URL</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #f58b7d; background: #2e1915; border-radius: 6px; padding: 3px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f58b7d"></span>Failed</span></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 19:12</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right">0:07</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; text-align: right; white-space: nowrap">
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #353b70; background: #181c33; border-radius: 7px; color: #c9cfff; text-decoration: none; font-size: 12px; font-weight: 600">Report</a>
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">JSON</a>
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Logs</a>
+                </td>
+              </tr>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">login-paypal.account-review.cc</span><span style="color: #868c97">/signin</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">b8e4d215</div></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; color: #a0a6b0">URL · Interactive</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #c7aef5; background: #251f33; border-radius: 6px; padding: 3px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #c7aef5"></span>Interrupted</span></td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 18:40</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right">2:00</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #1f2228; text-align: right; white-space: nowrap">
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #353b70; background: #181c33; border-radius: 7px; color: #c9cfff; text-decoration: none; font-size: 12px; font-weight: 600">Report</a>
+                  <a href="Report.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">JSON</a>
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Logs</a>
+                </td>
+              </tr>
+              <tr class="qrow">
+                <td style="padding: 12px 16px; max-width: 360px"><div style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 600">example.com</span><span style="color: #868c97">/</span></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7580">02fe9b61</div></td>
+                <td style="padding: 12px 16px; color: #a0a6b0">URL</td>
+                <td style="padding: 12px 16px"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #a0a6b0; background: #23262d; border-radius: 6px; padding: 3px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #a0a6b0"></span>Cancelled</span></td>
+                <td style="padding: 12px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #a0a6b0">26 Oct, 18:02</td>
+                <td style="padding: 12px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right; color: #6f7580">—</td>
+                <td style="padding: 12px 16px; text-align: right; white-space: nowrap">
+                  <a href="Logs.dc.html" class="ib" style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; text-decoration: none; font-size: 12px; font-weight: 600">Logs</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid #23262d; font-size: 12px; color: #a0a6b0">
+          <span>Showing <strong style="color: #e6e8ec">1–8</strong> of 248</span>
+          <nav aria-label="Pagination" style="display: flex; gap: 4px">
+            <a href="Queue.dc.html" aria-label="Previous page" style="width: 32px; height: 32px; border: 1px solid #2a2e36; border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #6f7580"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg></a>
+            <a href="Queue.dc.html" aria-current="page" style="min-width: 32px; height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; background: #4f5fe6; color: #ffffff; text-decoration: none; font-weight: 700">1</a>
+            <a href="Queue.dc.html" style="min-width: 32px; height: 32px; border: 1px solid #2a2e36; border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #c4c8cf; text-decoration: none">2</a>
+            <a href="Queue.dc.html" style="min-width: 32px; height: 32px; border: 1px solid #2a2e36; border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #c4c8cf; text-decoration: none">3</a>
+            <a href="Queue.dc.html" aria-label="Next page" style="width: 32px; height: 32px; border: 1px solid #2a2e36; border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #c4c8cf"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></a>
+          </nav>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

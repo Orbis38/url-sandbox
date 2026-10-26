@@ -1,49 +1,80 @@
 {% extends 'admin/master.html' %}
+{% block page_title %}Task Queue <span class="up-live-badge"><span class="up-live-dot"></span>LIVE</span>{% endblock %}
+{% block page_subtitle %}<p class="up-topbar-sub">Every analysis you submitted, newest first. Only your own tasks are listed.</p>{% endblock %}
+{% block page_actions %}
+<a href="/url/" class="up-btn up-btn-primary" style="height: 36px; padding: 0 14px !important">
+   <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+   New Analysis
+</a>
+{% endblock %}
 {% block body %}
 {{ super() }}
-<div class="up-kpi-grid up-queue-kpis">
-   <div class="up-kpi">
-      <div class="up-kpi-label">Total analyses</div>
-      <div class="up-kpi-value" id="kpi-total">{{ kpis.total }}</div>
-   </div>
-   <div class="up-kpi">
-      <div class="up-kpi-label">Running now</div>
-      <div class="up-kpi-value" id="kpi-running" style="color:var(--up-amber)">{{ kpis.running }}</div>
-   </div>
-   <div class="up-kpi">
-      <div class="up-kpi-label">Queued</div>
-      <div class="up-kpi-value" id="kpi-queued">{{ kpis.queued }}</div>
-   </div>
-   <div class="up-kpi">
-      <div class="up-kpi-label">Finished</div>
-      <div class="up-kpi-value" id="kpi-completed" style="color:var(--up-green)">{{ kpis.completed }}</div>
-   </div>
-</div>
-<div class="up-queue-wrap">
-   <div class="card new_card">
-      <div class="card-header">
-         <div class="div-left"><span class="up-live-dot"></span>&nbsp;Task Queue &mdash; live</div>
-         <div class="div-right"></div>
+<div class="up-page">
+   <div class="up-kpi-grid">
+      <div class="up-kpi">
+         <div class="up-kpi-label">Total analyses
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
+         </div>
+         <div class="up-kpi-value" id="kpi-total">{{ kpis.total }}</div>
+         <div class="up-kpi-sub">your recent tasks</div>
       </div>
-      <div class="card-body width100">
-         <div class="table-responsive">
-            <table class="table table-hover model-list up-queue-table">
-               <thead>
-                  <tr>
-                     <th>Target</th>
-                     <th>Type</th>
-                     <th>Status</th>
-                     <th>Submitted</th>
-                     <th>Duration</th>
-                     <th>Report &amp; Logs</th>
-                  </tr>
-               </thead>
-               <tbody id="queue-body">
-                  {% include 'queue_rows.html' %}
-               </tbody>
-            </table>
+      <div class="up-kpi">
+         <div class="up-kpi-label">Running now <span class="up-live-dot" style="background: var(--up-amber)"></span></div>
+         <div class="up-kpi-value" id="kpi-running" style="color: var(--up-amber)">{{ kpis.running }}</div>
+         <div class="up-kpi-sub">in a sandbox right now</div>
+      </div>
+      <div class="up-kpi">
+         <div class="up-kpi-label">Queued
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+         </div>
+         <div class="up-kpi-value" id="kpi-queued">{{ kpis.queued }}</div>
+         <div class="up-kpi-sub">waiting for a free slot</div>
+      </div>
+      <div class="up-kpi">
+         <div class="up-kpi-label">Finished
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4fc98a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+         </div>
+         <div class="up-kpi-value" id="kpi-completed" style="color: var(--up-green)">{{ kpis.completed }}</div>
+         <div class="up-kpi-sub"><span id="kpi-failed">{{ kpis.failed }}</span> failed, timed out or stopped</div>
+      </div>
+   </div>
+
+   <section class="up-card">
+      <div class="up-toolbar">
+         <div class="up-segmented" role="group" aria-label="Filter by status" id="queue-filter">
+            <button type="button" data-filter="all" aria-pressed="true">All</button>
+            <button type="button" data-filter="running" aria-pressed="false">Running</button>
+            <button type="button" data-filter="queued" aria-pressed="false">Queued</button>
+            <button type="button" data-filter="completed" aria-pressed="false">Completed</button>
+            <button type="button" data-filter="problems" aria-pressed="false">Problems</button>
+         </div>
+         <div class="up-search">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#868c97" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <label for="queue-search" class="up-sr-only">Filter tasks</label>
+            <input id="queue-search" type="search" placeholder="Filter by target or task ID" autocomplete="off">
          </div>
       </div>
-   </div>
+      <div class="up-table-scroll">
+         <table class="up-table up-queue-table" style="min-width: 860px">
+            <thead>
+               <tr>
+                  <th scope="col">Target</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Submitted</th>
+                  <th scope="col" class="up-num">Duration</th>
+                  <th scope="col" class="up-num">Actions</th>
+               </tr>
+            </thead>
+            <tbody id="queue-body">
+               {% include 'queue_rows.html' %}
+            </tbody>
+         </table>
+      </div>
+      <div class="up-table-foot">
+         <span id="queue-count">{{ tasks|length }} task{{ '' if tasks|length == 1 else 's' }}</span>
+         <span>Updates automatically</span>
+      </div>
+   </section>
 </div>
 {% endblock body %}

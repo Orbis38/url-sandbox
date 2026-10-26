@@ -1,48 +1,86 @@
 {% extends 'admin/master.html' %}
+{% block page_subtitle %}<p class="up-topbar-sub">Keys can submit analyses and read only your own tasks. Revoking a key blocks new requests immediately.</p>{% endblock %}
 {% block body %}
 {{ super() }}
-<div class="card new_card">
-  <div class="card-header"><div class="div-left">API Keys</div></div>
-  <div class="card-body width100">
-    <p>Keys can submit analyses and access only your tasks. Revoking a key immediately blocks new requests.</p>
-    {% if new_token %}
-    <div class="alert alert-success" role="status">
-      <p>Copy this key now. It will not be shown again.</p>
-      <code style="overflow-wrap:anywhere;user-select:all">{{ new_token }}</code>
+<div class="up-page">
+  {% if new_token %}
+  <section class="up-callout up-callout-success" role="status" aria-label="New API key">
+    <div class="up-callout-head">
+      <span class="up-callout-icon"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+      <div>
+        <div style="font-weight: 700">API key created</div>
+        <div class="up-callout-sub">Copy it now and store it in a secret manager — it will not be shown again.</div>
+      </div>
     </div>
-    {% endif %}
-    <form method="POST" action="{{ url_for('.index') }}">
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <code class="up-secret" id="new-key">{{ new_token }}</code>
+      <button type="button" class="up-btn up-btn-success" data-copy-target="new-key">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+        <span>Copy key</span>
+      </button>
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="up-cols">
+    <form method="POST" action="{{ url_for('.index') }}" class="up-card" style="flex: 1 1 340px; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+      <h2 class="up-card-title" style="margin-bottom: 4px">Create a key</h2>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="create">
-      <label for="key-label">Key name</label>
-      <input id="key-label" name="label" type="text" maxlength="80" required class="form-control" placeholder="e.g. Local automation">
-      <button type="submit" class="btn" style="margin-top:12px">Create API key</button>
+      <label for="key-label" class="up-field-label" style="margin: 0">Key name</label>
+      <input id="key-label" name="label" type="text" maxlength="80" required placeholder="e.g. SOAR playbook, local script" aria-describedby="key-label-hint">
+      <span id="key-label-hint" style="font-size: 12px; color: var(--up-muted)">Name it after where it will live, so you know what breaks when you revoke it.</span>
+      <button type="submit" class="up-btn up-btn-primary" style="align-self: flex-start; margin-top: 6px">Create API key</button>
     </form>
-    <div class="table-responsive" style="margin-top:24px">
-      <table class="table model-list">
-        <thead><tr><th>Name</th><th>Prefix</th><th>Created (UTC)</th><th>Last used (UTC)</th><th>Status</th><th></th></tr></thead>
+
+    <section class="up-card" style="flex: 2 1 480px; padding: 20px 22px">
+      <h2 class="up-card-title" style="margin-bottom: 4px">Submit an analysis</h2>
+      <p style="margin: 0 0 12px; font-size: 12px; color: var(--up-muted)">Send the key as <code>X-API-Key</code> or as a Bearer token.</p>
+      <pre style="margin: 0; padding: 14px 16px; background: var(--up-bg-input); border: 1px solid var(--up-border-soft); border-radius: 10px; font-size: 12px; line-height: 1.7; color: var(--up-text-nav); white-space: pre-wrap; overflow-wrap: anywhere">curl -X POST {{ request.host_url }}api/v1/analyze \
+    -H "X-API-Key: $URLPROBE_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"url": "https://example.com"}'</pre>
+    </section>
+  </div>
+
+  <section class="up-card">
+    <div class="up-card-head"><h2 class="up-card-title">Your keys</h2></div>
+    <div class="up-table-scroll">
+      <table class="up-table model-list" style="min-width: 760px">
+        <thead><tr><th scope="col">Name</th><th scope="col">Prefix</th><th scope="col">Created (UTC)</th><th scope="col">Last used (UTC)</th><th scope="col">Status</th><th scope="col"><span class="up-sr-only">Actions</span></th></tr></thead>
         <tbody>
         {% for key in keys %}
           <tr>
-            <td>{{ key.label }}</td><td><code>{{ key.prefix }}…</code></td>
-            <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-            <td>{{ key.last_used_at.strftime('%Y-%m-%d %H:%M') if key.last_used_at else 'Never' }}</td>
-            <td>{{ 'Revoked' if key.revoked_at else 'Active' }}</td>
-            <td>{% if not key.revoked_at %}
-              <form method="POST" action="{{ url_for('.index') }}">
+            <td style="font-weight: 600{% if key.revoked_at %}; color: var(--up-muted){% endif %}">{{ key.label }}</td>
+            <td class="up-data">{{ key.prefix }}…</td>
+            <td class="up-data">{{ key.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td class="up-data">{{ key.last_used_at.strftime('%Y-%m-%d %H:%M') if key.last_used_at else 'Never' }}</td>
+            <td>{% if key.revoked_at %}<span class="up-pill up-pill-revoked">Revoked</span>{% else %}<span class="up-pill up-pill-active">Active</span>{% endif %}</td>
+            <td class="up-row-actions">{% if not key.revoked_at %}
+              <form method="POST" action="{{ url_for('.index') }}" style="display: inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="revoke">
                 <input type="hidden" name="key_id" value="{{ key._id }}">
-                <button type="submit" class="btn btn-danger">Revoke</button>
+                <button type="submit" class="up-btn up-btn-danger up-btn-sm" aria-label="Revoke {{ key.label }}">Revoke</button>
               </form>
             {% endif %}</td>
           </tr>
         {% else %}
-          <tr><td colspan="6">You have no API keys.</td></tr>
+          <tr><td colspan="6" class="up-empty">You have no API keys yet.</td></tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
-  </div>
+  </section>
 </div>
+<script>
+document.addEventListener('click', function (event) {
+  var button = event.target.closest('[data-copy-target]');
+  if (!button || !navigator.clipboard) return;
+  var source = document.getElementById(button.getAttribute('data-copy-target'));
+  navigator.clipboard.writeText(source.textContent.trim()).then(function () {
+    button.querySelector('span').textContent = 'Copied';
+  });
+});
+</script>
 {% endblock %}

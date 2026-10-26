@@ -6,7 +6,8 @@
 from os import environ, path
 from uuid import UUID, uuid4
 from datetime import timedelta, datetime
-from json import dumps
+from json import dumps, loads
+from urllib.parse import urlsplit
 from bson.objectid import ObjectId
 from flask import Flask, flash, g, jsonify, redirect, request, session, url_for, send_file, Response
 from flask_mongoengine import MongoEngine
@@ -316,8 +317,8 @@ class BufferForm(form.Form):
     urltimeout = fields.SelectField('urltimeout', choices=[(5, '5 sec URL timeout'), (10, '10 sec URL timeout'), (30, '30 sec URL timeout'), (60, '1 min URL timeout')], default=(URL_TIMEOUT), coerce=int)
     analyzertimeout = fields.SelectField('analyzertimeout', choices=[(30, '30 sec analyzing timeout'), (60, '1 min analyzing timeout'), (120, '2 mins analyzing timeout')], default=(ANALYZER_TIMEOUT), coerce=int)
     interactivetimeout = fields.SelectField('interactivetimeout', choices=[(300, '5 min interactive timeout'), (600, '10 min interactive timeout'), (900, '15 min interactive timeout')], default=300, coerce=int)
-    submit = fields.SubmitField('Analyze', render_kw={"class": "btn"})
-    submitandwait = fields.SubmitField('Analyze & Wait', render_kw={"class": "btn btn-secondary"})
+    submit = fields.SubmitField('Analyze', render_kw={"class": "up-btn up-btn-primary up-btn-lg"})
+    submitandwait = fields.SubmitField('Analyze & Wait', render_kw={"class": "up-btn up-btn-secondary up-btn-lg"})
     __order = ('buffer', 'choices', 'useragents', 'urltimeout', 'analyzertimeout', 'interactivetimeout', 'submit', 'submitandwait')
 
     def __iter__(self):
@@ -343,11 +344,13 @@ class CustomViewBufferForm(BaseView):
         '''
         main route
         '''
-        temp_form = BufferForm(request.form)
+        # GET gets no formdata so the default switches (Tor, screenshot, cookies) show as on
+        temp_form = BufferForm(request.form if request.method == 'POST' else None)
         if request.method == 'POST':
             if not temp_form.validate():
                 flash('Invalid analysis options.', 'error')
-                return self.render('upload.html', header='New Analysis', form=temp_form, switches_details=''), 400
+                return self.render('upload.html', header='New Analysis', form=temp_form, switches_details='',
+                                   recent=get_queue_tasks(limit=3)), 400
             if temp_form.buffer.data != "":
                 good_url = False
                 try:
@@ -384,7 +387,8 @@ class CustomViewBufferForm(BaseView):
                     flash(gettext("Invalid URL"), 'error')
             else:
                 flash(gettext("Something wrong"), 'error')
-        return self.render("upload.html", header="New Analysis", form=temp_form, switches_details="")
+        return self.render("upload.html", header="New Analysis", form=temp_form, switches_details="",
+                           recent=get_queue_tasks(limit=3))
 
     def is_accessible(self):
         '''
@@ -433,6 +437,26 @@ def _format_duration(start, end):
     return "{}m {:02d}s".format(secs // 60, secs % 60)
 
 
+STATUS_LABELS = {
+    'queued': 'Queued', 'running': 'Running', 'completed': 'Completed', 'failed': 'Failed',
+    'timed_out': 'Timed out', 'interrupted': 'Interrupted', 'cancelled': 'Cancelled'
+}
+PROBLEM_STATES = {'failed', 'timed_out', 'interrupted', 'cancelled'}
+
+
+def split_target(target):
+    '''
+    split a target URL into host and the rest, scheme dropped, for compact display
+    '''
+    target = str(target or '')
+    with ignore_exception(Exception):
+        parts = urlsplit(target if '://' in target else '//' + target)
+        if parts.netloc:
+            rest = parts.path + ('?' + parts.query if parts.query else '')
+            return parts.netloc, rest
+    return target, ''
+
+
 def get_queue_tasks(limit=100):
     '''
     live task queue built from the task lifecycle collection (taskdblogs).
@@ -452,11 +476,17 @@ def get_queue_tasks(limit=100):
             end = item.get("end")
             logs = item.get("logs") or []
             status = task_status(item)
+            target = item.get("buffer", "") or item.get("domain", "") or "—"
+            host, rest = split_target(target)
             tasks.append({
                 "task": item.get("task", ""),
-                "target": item.get("buffer", "") or item.get("domain", "") or "—",
+                "short": item.get("task", "")[:8],
+                "target": target,
+                "host": host,
+                "rest": rest,
                 "type": "File" if item.get("type") == "file" else "URL",
                 "status": status,
+                "status_label": STATUS_LABELS.get(status, status.replace('_', ' ').capitalize()),
                 "submitted": _relative_time(start),
                 "duration": _format_duration(start, end),
             })
@@ -472,6 +502,7 @@ def get_queue_kpis(tasks):
         "running": sum(1 for t in tasks if t["status"] == "running"),
         "queued": sum(1 for t in tasks if t["status"] == "queued"),
         "completed": sum(1 for t in tasks if t["status"] in TERMINAL),
+        "failed": sum(1 for t in tasks if t["status"] in PROBLEM_STATES),
     }
 
 
@@ -505,6 +536,74 @@ class CustomQueueView(BaseView):
         return redirect(url_for('admin.login_view', next=request.url))
 
 
+def _as_text(value):
+    '''
+    certificate fields arrive as strings, lists of strings or lists of single-key dicts
+    '''
+    if isinstance(value, (list, tuple)):
+        items = [list(x.values())[0] if isinstance(x, dict) and x else x for x in value]
+        return ', '.join(str(x) for x in items if x not in (None, ''))
+    return str(value or '')
+
+
+def load_report_summary(task_id):
+    '''
+    the structured summary qbreport stores next to the HTML report (empty dict if absent)
+    '''
+    with ignore_exception(Exception):
+        raw = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json; type=ai_summary"})
+        if raw:
+            return loads(raw.decode('utf-8', 'ignore') if isinstance(raw, bytes) else raw)
+    return {}
+
+
+def report_run_details(task_id):
+    '''
+    header and side-rail facts for the report page: status, timing, options, summary
+    '''
+    doc = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find_one(
+        {"task": task_id, "owner_id": request_owner_id()}, {"logs": 0}) or {}
+    status = task_status(doc) if doc else 'completed'
+    start, end = doc.get("start"), doc.get("end")
+    summary = load_report_summary(task_id)
+    url_info = summary.get("url_analysis", {}) or {}
+    page = summary.get("page_content", {}) or {}
+    cert = summary.get("ssl_certificate", {}) or {}
+    target = doc.get("buffer") or url_info.get("submitted_url") or doc.get("domain") or task_id
+    return {
+        "status": status,
+        "status_label": STATUS_LABELS.get(status, status),
+        "target": target,
+        "started": start.strftime('%d %b %Y, %H:%M UTC') if start else '',
+        "duration": _format_duration(start, end) if start else '',
+        "error": doc.get("error") if status in PROBLEM_STATES else '',
+        "has_summary": bool(summary),
+        "final_url": url_info.get("final_url") or '',
+        "redirected": bool(url_info.get("redirected")),
+        "final_domain": url_info.get("final_domain") or '',
+        "page_title": page.get("page_title") or '',
+        "cert_issuer": _as_text(cert.get("issuer")),
+        "cert_until": _as_text(cert.get("valid_until")),
+        "cert_expired": bool(cert.get("expired")),
+        "dns_count": len(summary.get("dns_records") or []),
+        "indicators": [str(x).replace('_', ' ') for x in (summary.get("threat_indicators") or [])],
+        "options": [(label, bool(doc.get(key))) for key, label in REPORT_OPTION_LABELS],
+        "useragent": doc.get("useragent") or '',
+        "timeouts": [doc.get("url_timeout"), doc.get("analyzer_timeout")],
+        "proxy": bool(doc.get("use_proxy")),
+    }
+
+
+REPORT_OPTION_LABELS = [
+    ('take_screenshot', 'Viewport screenshot'),
+    ('take_full_screenshot', 'Full-page screenshot'),
+    ('sniffer_on', 'Packet capture'),
+    ('block_cookies', 'Cookie banners dismissed'),
+    ('interactive', 'Live browser session'),
+    ('record_vnc', 'Session recording'),
+]
+
+
 class CustomReportView(BaseView):
     '''
     per-task report viewer (HTML and JSON), reached from the task queue
@@ -536,7 +635,7 @@ class CustomReportView(BaseView):
             if item:
                 found = BeautifulSoup(item, 'html.parser').find('body')
                 body = found.decode_contents() if found else item.decode('utf-8', 'ignore')
-        return self.render("report.html", task_id=task_id, report_body=body)
+        return self.render("report.html", task_id=task_id, report_body=body, run=report_run_details(task_id))
 
     @expose('/<task_id>/json')
     def view_json(self, task_id):
@@ -1246,7 +1345,7 @@ ADMIN.add_link(CustomMenuLink(name='Logout', category='', url="/logout", icon_ty
 ADMIN.add_view(CustomViewBufferForm(name="New Analysis", endpoint='url', menu_icon_type='glyph', menu_icon_value='glyphicon-plus'))
 ADMIN.add_view(CustomQueueView(name="Task Queue", endpoint='queue', menu_icon_type='glyph', menu_icon_value='glyphicon-tasks', category='Monitor'))
 ADMIN.add_view(CustomLogsView(name="Active Logs", endpoint='activelogs', menu_icon_type='glyph', menu_icon_value='glyphicon-flash', category='Monitor'))
-ADMIN.add_view(ApiKeysView(name='API Keys', endpoint='apikeys', menu_icon_type='glyph', menu_icon_value='glyphicon-lock'))
+ADMIN.add_view(ApiKeysView(name='API Keys', endpoint='apikeys', menu_icon_type='glyph', menu_icon_value='glyphicon-lock', category='Account'))
 # Report / logs are reached from a task row in the queue, not from the sidebar.
 ADMIN.add_view(CustomReportView(name='Report', endpoint='report'))
 ADMIN.add_view(CustomTaskLogView(name='Task Log', endpoint='tasklog'))

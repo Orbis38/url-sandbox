@@ -1,8 +1,27 @@
 {% extends 'admin/master.html' %}
+{% block page_subtitle %}<p class="up-topbar-sub">Streaming output from your tasks — the latest 2,000 lines are kept on screen.</p>{% endblock %}
 {% block body %}
 {{ super() }}
-<div class="up-log-panel">
-   <div class="up-log-head"><span class="up-live-dot"></span>Active logs &mdash; last 3 minutes</div>
-   <textarea readonly class="activelogs" id='log' rows=25 autofocus></textarea>
+<div class="up-page">
+   <section class="up-log-panel">
+      <div class="up-log-toolbar">
+         <span class="up-log-status" id="log-status"><span class="up-live-dot"></span><span id="log-status-text">Streaming</span></span>
+         <div class="up-log-toolbar-actions">
+            <button type="button" class="up-btn up-btn-ghost up-btn-sm" id="log-pause" aria-pressed="false">
+               <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+               <span>Pause</span>
+            </button>
+            <button type="button" class="up-icon-btn" id="log-copy" aria-label="Copy logs" title="Copy logs" style="width: 32px; height: 32px">
+               <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+            </button>
+         </div>
+      </div>
+      <label for="log" class="up-sr-only">Active logs</label>
+      <textarea readonly class="activelogs" id="log" spellcheck="false"></textarea>
+      <div class="up-log-foot">
+         <span id="log-count">Waiting for log lines…</span>
+         <span>Pausing stops the view from updating; new lines are still collected.</span>
+      </div>
+   </section>
 </div>
 {% endblock body %}

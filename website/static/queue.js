@@ -1,21 +1,27 @@
 // Live task-queue polling. Rebuilds KPI counters and table rows every 2s.
 (function () {
+    var PROBLEMS = ['failed', 'timed_out', 'interrupted', 'cancelled'];
+    var LABELS = {queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed',
+                  timed_out: 'Timed out', interrupted: 'Interrupted', cancelled: 'Cancelled'};
+    var filter = 'all';
+    var query = '';
+
     function esc(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
     }
 
-    function cap(s) {
-        s = String(s || '');
-        return s.charAt(0).toUpperCase() + s.slice(1);
+    function label(status) {
+        status = String(status || '');
+        return LABELS[status] || (status.charAt(0).toUpperCase() + status.slice(1)).replace(/_/g, ' ');
     }
 
     function actions(t) {
         var task = encodeURIComponent(t.task);
         var html = '';
         if (['completed', 'failed', 'timed_out', 'interrupted'].indexOf(t.status) !== -1) {
-            html += '<a class="up-link" href="/report/' + task + '" target="_blank">Report</a>' +
+            html += '<a class="up-link up-link-primary" href="/report/' + task + '" target="_blank">Report</a>' +
                     '<a class="up-link" href="/report/' + task + '/json" target="_blank">JSON</a>';
         }
         html += '<a class="up-link" href="/tasklog/' + task + '" target="_blank">Logs</a>';
@@ -24,23 +30,85 @@
 
     function renderRows(tasks) {
         if (!tasks || tasks.length === 0) {
-            return '<tr><td colspan="6" class="text-center" style="color:var(--up-muted);padding:24px">' +
+            return '<tr><td colspan="6" class="up-empty">' +
                 'No tasks yet. Start a new analysis to populate the queue.</td></tr>';
         }
         var html = '';
         for (var i = 0; i < tasks.length; i++) {
             var t = tasks[i];
-            html += '<tr>' +
-                '<td class="up-target" title="' + esc(t.target) + '">' + esc(t.target) + '</td>' +
-                '<td>' + esc(t.type) + '</td>' +
+            html += '<tr data-status="' + esc(t.status) + '">' +
+                '<td class="up-target"><div class="up-target-url" title="' + esc(t.target) + '">' +
+                    '<span class="up-target-host">' + esc(t.host || t.target) + '</span>' +
+                    '<span class="up-target-rest">' + esc(t.rest) + '</span></div>' +
+                    '<div class="up-target-id">' + esc(t.short || String(t.task || '').slice(0, 8)) + '</div></td>' +
+                '<td style="color: var(--up-text-mid)">' + esc(t.type) + '</td>' +
                 '<td><span class="up-pill up-pill-' + esc(t.status) + '">' +
-                    '<span class="up-pill-dot"></span>' + esc(cap(t.status)) + '</span></td>' +
-                '<td>' + esc(t.submitted) + '</td>' +
-                '<td>' + esc(t.duration) + '</td>' +
+                    '<span class="up-pill-dot"></span>' + esc(t.status_label || label(t.status)) + '</span></td>' +
+                '<td class="up-data">' + esc(t.submitted) + '</td>' +
+                '<td class="up-data up-num" style="color: var(--up-text)">' + esc(t.duration) + '</td>' +
                 '<td class="up-row-actions">' + actions(t) + '</td>' +
             '</tr>';
         }
         return html;
+    }
+
+    function matches(row) {
+        var status = row.getAttribute('data-status');
+        if (filter === 'problems' && PROBLEMS.indexOf(status) === -1) return false;
+        if (filter !== 'all' && filter !== 'problems' && status !== filter) return false;
+        return !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+    }
+
+    // Filtering is client side over the rows already on the page.
+    function applyFilter() {
+        var body = document.getElementById('queue-body');
+        if (!body) return;
+        var rows = body.querySelectorAll('tr[data-status]');
+        var shown = 0;
+        for (var i = 0; i < rows.length; i++) {
+            var ok = matches(rows[i]);
+            rows[i].hidden = !ok;
+            if (ok) shown++;
+        }
+        var empty = document.getElementById('queue-nomatch');
+        if (rows.length && !shown) {
+            if (!empty) {
+                empty = document.createElement('tr');
+                empty.id = 'queue-nomatch';
+                empty.innerHTML = '<td colspan="6" class="up-empty">No tasks match this filter.</td>';
+                body.appendChild(empty);
+            }
+        } else if (empty) {
+            empty.parentNode.removeChild(empty);
+        }
+        var count = document.getElementById('queue-count');
+        if (count) {
+            var total = rows.length;
+            count.textContent = (shown === total ? total : shown + ' of ' + total) + (total === 1 ? ' task' : ' tasks');
+        }
+    }
+
+    function bindControls() {
+        var group = document.getElementById('queue-filter');
+        if (group) {
+            group.addEventListener('click', function (event) {
+                var button = event.target.closest('button[data-filter]');
+                if (!button) return;
+                filter = button.getAttribute('data-filter');
+                var buttons = group.querySelectorAll('button');
+                for (var i = 0; i < buttons.length; i++) {
+                    buttons[i].setAttribute('aria-pressed', buttons[i] === button ? 'true' : 'false');
+                }
+                applyFilter();
+            });
+        }
+        var search = document.getElementById('queue-search');
+        if (search) {
+            search.addEventListener('input', function () {
+                query = search.value.trim().toLowerCase();
+                applyFilter();
+            });
+        }
     }
 
     function poll() {
@@ -64,15 +132,23 @@
                     $("#kpi-running").text(data.kpis.running);
                     $("#kpi-queued").text(data.kpis.queued);
                     $("#kpi-completed").text(data.kpis.completed);
+                    $("#kpi-failed").text(data.kpis.failed || 0);
                 }
                 if (data && data.tasks) {
                     $("#queue-body").html(renderRows(data.tasks));
+                    applyFilter();
                 }
             },
             complete: function () {
                 setTimeout(poll, delay);
             }
         });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindControls);
+    } else {
+        bindControls();
     }
 
     $(document).ready(function () {

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UrlProbe — Foundations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0f1115}
+a{color:#b3bcff}a:hover{color:#d4d9ff}
+.sw{appearance:none;-webkit-appearance:none;margin:0;width:38px;height:22px;border-radius:11px;background:#2c3039;position:relative;cursor:pointer}
+.sw::before{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#e6e8ec;transition:left .15s}
+.sw:checked{background:#4f5fe6}
+.sw:checked::before{left:19px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1180px; box-sizing: border-box; padding: 56px 64px; font-family: Inter, system-ui, sans-serif; color: #e6e8ec; background: #0f1115; font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; gap: 40px">
+
+  <div>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97">URLPROBE · DESIGN FOUNDATIONS</div>
+    <h1 style="margin: 4px 0 0; font-size: 28px; font-weight: 800; letter-spacing: -.5px">Tokens &amp; components</h1>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px">
+
+    <!-- Colors -->
+    <section style="display: flex; flex-direction: column; gap: 16px">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 700">Color</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+        <div><div style="height: 56px; border-radius: 10px; background: #0b0d10; border: 1px solid #2a2e36"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Sidebar</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-bg-sidebar</div></div>
+        <div><div style="height: 56px; border-radius: 10px; background: #0f1115; border: 1px solid #2a2e36"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Page</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-bg</div></div>
+        <div><div style="height: 56px; border-radius: 10px; background: #16181d; border: 1px solid #2a2e36"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Card</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-bg-card</div></div>
+        <div><div style="height: 56px; border-radius: 10px; background: #0c0e12; border: 1px solid #2f343d"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Input</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-bg-input</div></div>
+        <div><div style="height: 56px; border-radius: 10px; background: #4f5fe6"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Accent</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-accent</div></div>
+        <div><div style="height: 56px; border-radius: 10px; background: #1c2140"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Accent soft</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-accent-soft</div></div>
+        <div><div style="height: 56px; border-radius: 10px; background: #b3bcff"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Accent text</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-accent-text</div></div>
+        <div><div style="height: 56px; border-radius: 10px; background: #8e9bff"></div><div style="font-size: 12px; font-weight: 600; margin-top: 6px">Focus ring</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">--up-focus (new)</div></div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+        <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 10px; padding: 12px"><div style="color: #e6e8ec; font-weight: 600">Primary text</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">#E6E8EC · 14.9:1</div></div>
+        <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 10px; padding: 12px"><div style="color: #a0a6b0; font-weight: 600">Secondary text</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">#A0A6B0 · 7.4:1</div></div>
+        <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 10px; padding: 12px"><div style="color: #868c97; font-weight: 600">Muted text</div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">#868C97 · 5.1:1 (was 4.2)</div></div>
+      </div>
+    </section>
+
+    <!-- Type -->
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 700">Type scale</h2>
+      <div style="background: #16181d; border: 1px solid #2a2e36; border-radius: 12px; overflow: hidden">
+        <div style="display: flex; align-items: baseline; gap: 16px; padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="flex: 0 0 64px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">28 / 800</span><span style="font-size: 28px; font-weight: 800; letter-spacing: -.5px">248</span><span style="margin-left: auto; font-size: 12px; color: #868c97">KPI, error title</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px; padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="flex: 0 0 64px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">20 / 700</span><span style="font-size: 20px; font-weight: 700">Task Queue</span><span style="margin-left: auto; font-size: 12px; color: #868c97">Page title</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px; padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="flex: 0 0 64px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">15 / 700</span><span style="font-size: 15px; font-weight: 700">What happens next</span><span style="margin-left: auto; font-size: 12px; color: #868c97">Card title</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px; padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="flex: 0 0 64px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">13 / 500</span><span style="font-size: 13px">Body and controls</span><span style="margin-left: auto; font-size: 12px; color: #868c97">Default</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px; padding: 12px 16px; border-bottom: 1px solid #1f2228"><span style="flex: 0 0 64px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">12 mono</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">docs-sharepoint-view.net/file</span><span style="margin-left: auto; font-size: 12px; color: #868c97">URLs, IDs, data</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px; padding: 12px 16px"><span style="flex: 0 0 64px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #868c97">11 / 700</span><span style="font-size: 11px; font-weight: 700; letter-spacing: .8px; color: #868c97">SECTION LABEL</span><span style="margin-left: auto; font-size: 12px; color: #868c97">Overlines, table heads</span></div>
+      </div>
+      <div style="display: flex; gap: 16px; font-size: 12px; color: #a0a6b0">
+        <span>Spacing: 4 · 8 · 12 · 16 · 24 · 32</span>
+        <span>Radius: 6 pill · 8 control · 10 field · 14 card</span>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px">
+    <!-- Status -->
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 700">Task status</h2>
+      <p style="margin: 0; font-size: 12px; color: #a0a6b0">Every backend state gets its own pill. Failure states differ in lightness as well as hue, so they still separate for color-blind analysts.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #b6c2d4; background: #222833; border-radius: 6px; padding: 4px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #b6c2d4"></span>Queued</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #e6b94a; background: #2a2414; border-radius: 6px; padding: 4px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #e6b94a"></span>Running</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #4fc98a; background: #142a1d; border-radius: 6px; padding: 4px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #4fc98a"></span>Completed</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #f58b7d; background: #2e1915; border-radius: 6px; padding: 4px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f58b7d"></span>Failed</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #f0a060; background: #2e2015; border-radius: 6px; padding: 4px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f0a060"></span>Timed out</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #c7aef5; background: #251f33; border-radius: 6px; padding: 4px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #c7aef5"></span>Interrupted</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #a0a6b0; background: #23262d; border-radius: 6px; padding: 4px 10px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #a0a6b0"></span>Cancelled</span>
+      </div>
+      <h2 style="margin: 12px 0 0; font-size: 15px; font-weight: 700">Log levels</h2>
+      <div style="background: #0b0d10; border: 1px solid #2a2e36; border-radius: 10px; padding: 8px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px">
+        <div style="display: flex; gap: 14px; padding: 3px 14px"><span style="color: #6f7580">21:04:06</span><span style="width: 48px; color: #7fb4ff; font-weight: 600">INFO</span><span style="color: #c4c8cf">GET … → 302</span></div>
+        <div style="display: flex; gap: 14px; padding: 3px 14px; background: #1d1910"><span style="color: #6f7580">21:04:07</span><span style="width: 48px; color: #e6b94a; font-weight: 600">WARN</span><span style="color: #f0dca8">Download intercepted and quarantined</span></div>
+        <div style="display: flex; gap: 14px; padding: 3px 14px; background: #22140f"><span style="color: #6f7580">21:04:12</span><span style="width: 48px; color: #f58b7d; font-weight: 600">ERROR</span><span style="color: #ffc4bb">OCR failed on full-page image</span></div>
+      </div>
+    </section>
+
+    <!-- Controls -->
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 700">Controls</h2>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+        <button type="button" style="height: 40px; padding: 0 18px; border: none; border-radius: 9px; background: #4f5fe6; color: #ffffff; font: inherit; font-weight: 700">Primary</button>
+        <button type="button" style="height: 40px; padding: 0 18px; border: 1px solid #353a44; border-radius: 9px; background: transparent; color: #e6e8ec; font: inherit; font-weight: 600">Secondary</button>
+        <button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #2a2e36; border-radius: 9px; background: transparent; color: #c4c8cf; font: inherit; font-weight: 600">Ghost</button>
+        <button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #4a2a25; border-radius: 9px; background: transparent; color: #f58b7d; font: inherit; font-weight: 600">Revoke</button>
+        <button type="button" style="height: 40px; padding: 0 18px; border: none; border-radius: 9px; background: #4f5fe6; color: #ffffff; font: inherit; font-weight: 700; outline: 2px solid #8e9bff; outline-offset: 2px">Focused</button>
+        <button type="button" disabled style="height: 40px; padding: 0 18px; border: none; border-radius: 9px; background: #4f5fe6; color: #ffffff; font: inherit; font-weight: 700; opacity: .45">Disabled</button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="f1" style="font-size: 12px; font-weight: 600; color: #a0a6b0">Field — rest</label>
+          <input id="f1" type="text" value="https://example.com" style="height: 40px; padding: 0 12px; background: #0c0e12; border: 1px solid #2f343d; border-radius: 9px; color: #e6e8ec; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; outline: none">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="f2" style="font-size: 12px; font-weight: 600; color: #a0a6b0">Field — focus</label>
+          <input id="f2" type="text" value="https://example.com" style="height: 40px; padding: 0 12px; background: #0c0e12; border: 1px solid #4f5fe6; box-shadow: 0 0 0 3px rgba(79,95,230,.25); border-radius: 9px; color: #e6e8ec; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; outline: none">
+        </div>
+      </div>
+      <div style="display: flex; gap: 24px; align-items: center">
+        <label style="display: flex; align-items: center; gap: 10px"><input type="checkbox" class="sw" checked>On</label>
+        <label style="display: flex; align-items: center; gap: 10px"><input type="checkbox" class="sw">Off</label>
+        <span style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #353b70; background: #181c33; border-radius: 7px; color: #c9cfff; font-size: 12px; font-weight: 600">Report</span>
+        <span style="display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 1px solid #2a2e36; border-radius: 7px; color: #c4c8cf; font-size: 12px; font-weight: 600">Logs</span>
+      </div>
+      <p style="margin: 0; font-size: 12px; color: #a0a6b0">Links and buttons get a pointer cursor and a visible focus ring; the current <code style="font-family: 'IBM Plex Mono', monospace">cursor: default !important</code> and <code style="font-family: 'IBM Plex Mono', monospace">outline: 0</code> resets go away.</p>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

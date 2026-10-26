@@ -2,38 +2,53 @@
 {% block body %}
 {{ super() }}
 {% if current_user.is_authenticated %}
-<div class="col">
-   <div class="card new_card">
-      <div class="card-header">
-         <div class="div-left">{{ filename }}</div>
-         <div class="div-right"></div>
-      </div>
-      <div class="card-body width100">
-         {{ intro|markdown }}
-      </div>
-   </div>
+<div class="up-page">
+   <section class="up-card">
+      <div class="up-card-head"><h2 class="up-card-title">{{ filename }}</h2></div>
+      <div class="up-card-body">{{ intro|markdown }}</div>
+   </section>
 </div>
 {% else %}
-<div class="col-lg-4 col-center vertical-center">
-   <div class="card new_card">
-      <div class="card-header">
-         <div class="div-left">{{ active }} form</div>
-         <div class="div-right"></div>
-      </div>
-      <div class="card-body width100">
-         <form method="POST">
-            <div class="form-group">
-               {% for f in form if f.type != 'CSRFTokenField' %}
-               {{ f }}
-               {% endfor %}
-               <button class="btn" type="submit">{{ active }}</button>
-               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-               {{ link | safe }}
-            </div>
-         </form>
+{% set is_login = active == 'Login' %}
+<div class="up-auth">
+   <div class="up-auth-brand">
+      <img src="/static/urlprobe_icon.png" alt="UrlProbe">
+      <div>
+         <div class="up-auth-name">UrlProbe</div>
+         <div class="up-auth-tag">Isolated URL detonation for security analysts</div>
       </div>
    </div>
+   <form method="POST" class="up-auth-card" novalidate>
+      <h1>{{ 'Sign in' if is_login else 'Create an account' }}</h1>
+      {% for f in form if f.type != 'CSRFTokenField' %}
+      <div class="up-field">
+         <label for="{{ f.id }}" class="up-field-label">{{ 'Username' if f.name == 'login' else 'Password' if f.name == 'password' else f.label.text }}</label>
+         {% if f.errors %}
+         {{ f(autocomplete=('username' if f.name == 'login' else ('current-password' if is_login else 'new-password')), **{'aria-describedby': f.id ~ '-error', 'aria-invalid': 'true', 'style': 'border-color: #8a3d33 !important'}) }}
+         <span class="up-field-error" id="{{ f.id }}-error">
+            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            {{ f.errors[0] }}
+         </span>
+         {% else %}
+         {{ f(autocomplete=('username' if f.name == 'login' else ('current-password' if is_login else 'new-password'))) }}
+         {% endif %}
+      </div>
+      {% endfor %}
+      {% if not is_login %}
+      <p class="up-hint" style="margin: 0">Use a username and password you don't use anywhere else.</p>
+      {% endif %}
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="up-btn up-btn-primary" type="submit">{{ 'Sign in' if is_login else 'Create account' }}</button>
+      {% if is_login %}
+      <p class="up-auth-alt">No account? <a href="{{ url_for('.register_view') }}">Register</a></p>
+      {% else %}
+      <p class="up-auth-alt">Already registered? <a href="{{ url_for('.login_view') }}">Sign in</a></p>
+      {% endif %}
+   </form>
+   <p class="up-auth-foot">
+      <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Each analyst sees only their own tasks, reports and API keys.
+   </p>
 </div>
 {% endif %}
-<script async defer src="https://buttons.github.io/buttons.js"></script>
 {% endblock body %}
