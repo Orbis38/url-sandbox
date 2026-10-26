@@ -589,6 +589,7 @@ def report_run_details(task_id):
         "target": target,
         "started": start.strftime('%d %b %Y, %H:%M UTC') if start else '',
         "duration": _format_duration(start, end) if start else '',
+        "elapsed_seconds": max(0, int(((end or datetime.utcnow()) - start).total_seconds())) if start else 0,
         "error": doc.get("error") if status in PROBLEM_STATES else '',
         "has_summary": bool(summary),
         "final_url": url_info.get("final_url") or '',

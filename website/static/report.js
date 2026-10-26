@@ -125,10 +125,40 @@
         });
     }
 
+    // same format as _format_duration in web.py
+    function formatDuration(secs) {
+        secs = Math.max(0, Math.floor(secs));
+        if (secs < 60) return secs + 's';
+        var rest = secs % 60;
+        return Math.floor(secs / 60) + 'm ' + (rest < 10 ? '0' : '') + rest + 's';
+    }
+
+    // Count the elapsed time up from the server's figure (no client clock involved).
+    function tickElapsed() {
+        var elapsed = document.getElementById('run-elapsed');
+        if (!elapsed) return;
+        var base = parseInt(elapsed.getAttribute('data-seconds'), 10) || 0;
+        var loaded = Date.now();
+        setInterval(function () {
+            elapsed.textContent = formatDuration(base + (Date.now() - loaded) / 1000);
+        }, 1000);
+    }
+
+    function showRunning() {
+        var pill = document.getElementById('run-status');
+        if (pill && pill.classList.contains('up-pill-queued')) {
+            pill.classList.replace('up-pill-queued', 'up-pill-running');
+            pill.lastElementChild.textContent = 'Running';
+        }
+        var title = document.getElementById('run-wait-title');
+        if (title) title.textContent = 'Analyzing in the sandbox\u2026';
+    }
+
     // While the task is still queued or running, reload once it reaches a final state.
     function watchProgress() {
         var split = document.querySelector('.up-report-split');
         if (!split || ['queued', 'running'].indexOf(split.getAttribute('data-status')) === -1) return;
+        tickElapsed();
         var url = '/api/v1/tasks/' + encodeURIComponent(split.getAttribute('data-task'));
         function check() {
             if (document.hidden) return setTimeout(check, 5000);
@@ -137,9 +167,10 @@
                 .then(function (data) {
                     if (data && ['queued', 'running'].indexOf(data.status) === -1) {
                         window.location.reload();
-                    } else {
-                        setTimeout(check, 4000);
+                        return;
                     }
+                    if (data && data.status === 'running') showRunning();
+                    setTimeout(check, 4000);
                 })
                 .catch(function () { setTimeout(check, 8000); });
         }

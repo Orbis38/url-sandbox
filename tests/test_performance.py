@@ -96,8 +96,9 @@ def test_network_graph_hosts_come_from_request_urls(tmp_path):
 
 def test_screenshot_helpers_keep_binary_bytes_out_of_json(tmp_path):
     namespace = load_functions('box/qbsandbox.py',
-        ['make_ai_screenshot_jpeg', 'take_normal_screen_shot', 'take_full_screen_shot'],
-        {'save_image': save_image, 'preview_jpeg': preview_jpeg})
+        ['make_ai_screenshot_jpeg', 'capture_full_page_png', 'take_normal_screen_shot', 'take_full_screen_shot'],
+        {'save_image': save_image, 'preview_jpeg': preview_jpeg, 'ceil': __import__('math').ceil,
+         'b64decode': b64decode, 'FULL_PAGE_MAX_HEIGHT': 16000})
     raw = png()
     db = TinyDB(str(tmp_path / 'analysis.json'))
     driver = SimpleNamespace(get_screenshot_as_png=lambda: raw,
@@ -308,3 +309,24 @@ def test_indexes_cover_new_queries(env):
     web, db, *_ = env
     assert any(index['key'] == [('owner_id', 1), ('start', -1)] for index in db.taskdblogs.index_information().values())
     assert any(index['key'] == [('task', 1), ('kind', 1)] and index.get('unique') for index in db.artifacts.index_information().values())
+
+
+def test_full_screenshot_captures_beyond_the_viewport():
+    calls = []
+    raw = png('blue')
+
+    def execute_cdp_cmd(command, params):
+        calls.append((command, params))
+        if command == 'Page.getLayoutMetrics':
+            return {'cssContentSize': {'width': 1440, 'height': height}}
+        return {'data': b64encode(raw).decode()}
+
+    namespace = load_functions('box/qbsandbox.py', ['capture_full_page_png'],
+                               {'ceil': __import__('math').ceil, 'b64decode': b64decode, 'FULL_PAGE_MAX_HEIGHT': 16000})
+    driver = SimpleNamespace(execute_cdp_cmd=execute_cdp_cmd)
+    for height, expected in [(3200.5, 3201), (90000, 16000)]:
+        calls.clear()
+        assert namespace['capture_full_page_png'](driver) == raw
+        capture = calls[1][1]
+        assert capture['captureBeyondViewport'] is True
+        assert capture['clip']['height'] == expected and capture['clip']['width'] == 1440

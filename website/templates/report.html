@@ -15,9 +15,9 @@
             </button>
          </div>
          <div class="up-report-meta">
-            <span class="up-pill up-pill-{{ run.status }}"><span class="up-pill-dot"></span>{{ run.status_label }}</span>
+            <span class="up-pill up-pill-{{ run.status }}" id="run-status"><span class="up-pill-dot"></span><span>{{ run.status_label }}</span></span>
             {% if run.started %}<span>{{ run.started }}</span>{% endif %}
-            {% if run.duration %}<span class="up-sep" aria-hidden="true">•</span><span>{{ 'elapsed' if run.status in ['queued', 'running'] else 'ran' }} {{ run.duration }}</span>{% endif %}
+            {% if run.duration %}<span class="up-sep" aria-hidden="true">•</span><span>{{ 'elapsed' if run.status in ['queued', 'running'] else 'ran' }} <span id="run-elapsed" data-seconds="{{ run.elapsed_seconds }}">{{ run.duration }}</span></span>{% endif %}
          </div>
          {% if run.error %}
          <p class="up-report-error">
@@ -62,7 +62,7 @@
          {% if run.status in ['queued', 'running'] %}
          <div class="up-empty-box" role="status">
             <span class="taskspinner" aria-hidden="true" style="margin: 0 0 6px"></span>
-            <strong>{{ 'Waiting for a free sandbox' if run.status == 'queued' else 'Analyzing in the sandbox' }}&hellip;</strong>
+            <strong id="run-wait-title">{{ 'Waiting for a free sandbox' if run.status == 'queued' else 'Analyzing in the sandbox' }}&hellip;</strong>
             <span>This page refreshes by itself when the analysis finishes. View logs shows live progress.</span>
          </div>
          {% else %}

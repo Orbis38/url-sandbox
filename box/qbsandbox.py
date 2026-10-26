@@ -4,6 +4,8 @@
 '''
 
 from time import sleep
+from base64 import b64decode
+from math import ceil
 from json import loads, dumps
 from warnings import filterwarnings
 from subprocess import Popen, DEVNULL, PIPE
@@ -387,13 +389,34 @@ def extract_phishing_heuristics(driver, parsed, extracted_table):
         return {}
 
 
+FULL_PAGE_MAX_HEIGHT = 16000
+
+
+def capture_full_page_png(driver):
+    '''
+    the whole document, not just the viewport: WebDriver element screenshots are
+    clipped to the visible window, so DevTools captures beyond the viewport instead
+    '''
+    try:
+        metrics = driver.execute_cdp_cmd('Page.getLayoutMetrics', {})
+        size = metrics.get('cssContentSize') or metrics['contentSize']
+        width = max(1, int(ceil(size['width'])))
+        height = max(1, min(int(ceil(size['height'])), FULL_PAGE_MAX_HEIGHT))
+        shot = driver.execute_cdp_cmd('Page.captureScreenshot', {
+            'format': 'png', 'captureBeyondViewport': True, 'fromSurface': True,
+            'clip': {'x': 0, 'y': 0, 'width': width, 'height': height, 'scale': 1}})
+        return b64decode(shot['data'])
+    except Exception as error:
+        print(f"[SandBox] full-page capture via DevTools failed ({error}), using the viewport", flush=True)
+        return driver.find_element(By.TAG_NAME, 'html').screenshot_as_png
+
+
 def take_full_screen_shot(driver, screenshot_table, task_dir):
     '''
     capture full screenshot
     '''
     try:
-        element = driver.find_element(By.TAG_NAME, 'html')
-        screenshot = element.screenshot_as_png
+        screenshot = capture_full_page_png(driver)
         screenshot_table.insert({'full_image': save_image(task_dir, 'full_image', screenshot)})
         print("[SandBox] Screenshot saved")
     except BaseException:
@@ -903,8 +926,7 @@ def serve_interactive(server, driver, parsed, analyzer_db):
                 
                 if take_full:
                     try:
-                        element = driver.find_element(By.TAG_NAME, 'html')
-                        full_screenshot = element.screenshot_as_png
+                        full_screenshot = capture_full_page_png(driver)
                         screenshot_table.insert({
                             'normal_image': save_image(os.path.dirname(socket_path), 'normal_image', screenshot),
                             'full_image': save_image(os.path.dirname(socket_path), 'full_image', full_screenshot)
