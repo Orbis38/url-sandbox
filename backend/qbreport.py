@@ -490,6 +490,7 @@ def make_report(parsed):
                     if (container) {{
                         // the 720px frame was for the live view; the summary only needs its own height
                         container.style.height = 'auto';
+                        container.style.aspectRatio = 'auto';
                         container.style.background = 'transparent';
                         container.innerHTML =
                             '<div class="up-session-ended-box">' +
@@ -585,6 +586,7 @@ def make_report(parsed):
                     var container = document.getElementById('vnc-container');
                     if (container) {{
                         container.style.height = 'auto';
+                        container.style.aspectRatio = 'auto';
                         container.style.background = 'transparent';
                         container.innerHTML =
                             '<div class="up-session-ended-box">' +
