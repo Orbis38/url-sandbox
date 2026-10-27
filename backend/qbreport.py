@@ -395,7 +395,7 @@ def make_report(parsed):
             .up-vnc-frame-container {{
                 position: relative;
                 width: 100%;
-                height: 720px;
+                aspect-ratio: 1280 / 720;  /* the sandbox display: noVNC fills it without grey bands */
                 background: #000;
             }}
             .up-vnc-frame-container iframe {{

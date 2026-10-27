@@ -587,6 +587,8 @@ button.custom-close { -webkit-appearance: none; padding: 0 4px; background: none
 /* live-session widget stored in reports built before the fix: once the session has ended,
    drop the 720px black frame that only the live view needs */
 .up-vnc-frame-container:has(.up-session-ended-box) { height: auto !important; background: transparent !important; }
+/* while live, keep the frame at the sandbox display's 1280x720 ratio so noVNC's scaled view has no grey bands */
+.up-vnc-frame-container:not(:has(.up-session-ended-box)) { height: auto !important; aspect-ratio: 1280 / 720; }
 .up-session-ended-box { min-height: 0 !important; padding: 40px 20px !important; }
 
 /* legacy report sections (built by backend/qbreport.py) shown as cards */
