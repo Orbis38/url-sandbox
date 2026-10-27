@@ -379,6 +379,11 @@ details.up-details[open] > summary .up-chev { transform: rotate(90deg); }
 .up-pill-failed { color: var(--up-red); background: var(--up-red-bg); }
 .up-pill-timed_out { color: var(--up-orange); background: var(--up-orange-bg); }
 .up-pill-interrupted { color: var(--up-purple); background: var(--up-purple-bg); }
+.up-vnc-active { color: var(--up-green); background: var(--up-green-bg); }
+.up-vnc-active .up-pill-dot { animation: up-pulse 1.4s ease-in-out infinite; }
+.up-vnc-starting { color: var(--up-amber); background: var(--up-amber-bg); }
+.up-vnc-inactive { color: var(--up-text-mid); background: var(--up-border-soft); }
+.up-vnc-none { font-size: 12px; color: var(--up-muted); }
 .up-pill-cancelled, .up-pill-revoked { color: var(--up-text-mid); background: var(--up-border-soft); }
 .up-live-badge {
      display: inline-flex; align-items: center; gap: 6px;
@@ -392,7 +397,7 @@ details.up-details[open] > summary .up-chev { transform: rotate(90deg); }
 }
 .up-badge { font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 8px; color: var(--up-amber); background: var(--up-amber-bg); }
 @keyframes up-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .up-live-dot, .up-pill-running .up-pill-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .up-live-dot, .up-pill-running .up-pill-dot, .up-vnc-active .up-pill-dot { animation: none; } }
 
 /* ── KPI tiles ────────────────────────────────────── */
 .up-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }

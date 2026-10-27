@@ -6,6 +6,7 @@
    </td>
    <td style="color: var(--up-text-mid)">{{ t.type }}</td>
    <td><span class="up-pill up-pill-{{ t.status }}"><span class="up-pill-dot"></span>{{ t.status_label }}</span></td>
+   <td>{% if t.vnc == 'none' %}<span class="up-vnc-none">Not requested</span>{% else %}<span class="up-pill up-vnc-{{ t.vnc }}"><span class="up-pill-dot"></span>{{ {'active': 'Active', 'starting': 'Starting', 'inactive': 'Inactive'}[t.vnc] }}</span>{% endif %}</td>
    <td class="up-data">{{ t.submitted }}</td>
    <td class="up-data up-num" style="color: var(--up-text)">{{ t.duration }}</td>
    <td class="up-row-actions">
@@ -17,5 +18,5 @@
    </td>
 </tr>
 {% else %}
-<tr><td colspan="6" class="up-empty">No tasks yet. Start a new analysis to populate the queue.</td></tr>
+<tr><td colspan="7" class="up-empty">No tasks yet. Start a new analysis to populate the queue.</td></tr>
 {% endfor %}

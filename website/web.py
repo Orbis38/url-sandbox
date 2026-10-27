@@ -471,6 +471,38 @@ def split_target(target):
     return target, ''
 
 
+VNC_LABELS = {'active': 'Active', 'starting': 'Starting', 'inactive': 'Inactive', 'none': 'Not requested'}
+
+
+def read_vnc_session(task_id):
+    '''
+    live-session files the box writes into the task's output folder: saved metadata and
+    whether its control socket is still there
+    '''
+    import json
+    output_dir = path.join(json_settings[environ["project_env"]]["output_folder"], task_id)
+    saved = {}
+    with ignore_exception(Exception):
+        with open(path.join(output_dir, "vnc_session.json")) as handle:
+            saved = json.load(handle)
+    socket_alive = path.exists(path.join(output_dir, "control.sock"))
+    return saved, socket_alive, socket_alive and saved.get("status") != "ended", output_dir
+
+
+def vnc_state(task_id, interactive, status):
+    '''
+    none (not requested), starting (requested, session not up yet), active, inactive (ended)
+    '''
+    if not interactive:
+        return 'none'
+    saved, socket_alive, active, _ = read_vnc_session(task_id)
+    if active:
+        return 'active'
+    if status in ('queued', 'running') and not saved and not socket_alive:
+        return 'starting'
+    return 'inactive'
+
+
 def get_queue_tasks(limit=100):
     '''
     live task queue built from the task lifecycle collection (taskdblogs).
@@ -482,7 +514,7 @@ def get_queue_tasks(limit=100):
         return tasks
     with ignore_exception(Exception):
         cursor = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find(
-            {"owner_id": owner_id}, {'task': 1, 'buffer': 1, 'domain': 1, 'type': 1,
+            {"owner_id": owner_id}, {'task': 1, 'buffer': 1, 'domain': 1, 'type': 1, 'interactive': 1,
                                      'start': 1, 'end': 1, 'status': 1, 'has_logs': 1, 'logs': {'$slice': 1}}
         ).sort([("start", -1)]).limit(limit)
         for item in cursor:
@@ -501,6 +533,7 @@ def get_queue_tasks(limit=100):
                 "type": "File" if item.get("type") == "file" else "URL",
                 "status": status,
                 "status_label": STATUS_LABELS.get(status, status.replace('_', ' ').capitalize()),
+                "vnc": vnc_state(item.get("task", ""), item.get("interactive"), status),
                 "submitted": _relative_time(start),
                 "duration": _format_duration(start, end),
             })
@@ -964,23 +997,8 @@ def live_interact_status(task_id):
     if not check_api_auth():
         return jsonify(error="Unauthorized"), 401
     
-    import json
-    output_dir = path.join(json_settings[environ["project_env"]]["output_folder"], task_id)
-    session_path = path.join(output_dir, "vnc_session.json")
-    socket_path = path.join(output_dir, "control.sock")
+    saved, _, is_active, output_dir = read_vnc_session(task_id)
     video_path = path.join(output_dir, "session.mp4")
-
-    saved = {}
-    if path.exists(session_path):
-        try:
-            with open(session_path, 'r') as f:
-                saved = json.load(f)
-        except Exception:
-            pass
-
-    socket_alive = path.exists(socket_path)
-    is_ended = (saved.get("status") == "ended")
-    is_active = socket_alive and not is_ended
     has_video = (not is_active) and path.exists(video_path) and path.getsize(video_path) > 1000
 
     data = {

@@ -3,6 +3,7 @@
     var PROBLEMS = ['failed', 'timed_out', 'interrupted', 'cancelled'];
     var LABELS = {queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed',
                   timed_out: 'Timed out', interrupted: 'Interrupted', cancelled: 'Cancelled'};
+    var VNC = {active: 'Active', starting: 'Starting', inactive: 'Inactive'};
     var filter = 'all';
     var query = '';
 
@@ -27,9 +28,14 @@
             (t.status === 'cancelled' ? 'Details' : 'Progress') + '</a>';
     }
 
+    function vnc(state) {
+        if (!VNC[state]) return '<span class="up-vnc-none">Not requested</span>';
+        return '<span class="up-pill up-vnc-' + state + '"><span class="up-pill-dot"></span>' + VNC[state] + '</span>';
+    }
+
     function renderRows(tasks) {
         if (!tasks || tasks.length === 0) {
-            return '<tr><td colspan="6" class="up-empty">' +
+            return '<tr><td colspan="7" class="up-empty">' +
                 'No tasks yet. Start a new analysis to populate the queue.</td></tr>';
         }
         var html = '';
@@ -43,6 +49,7 @@
                 '<td style="color: var(--up-text-mid)">' + esc(t.type) + '</td>' +
                 '<td><span class="up-pill up-pill-' + esc(t.status) + '">' +
                     '<span class="up-pill-dot"></span>' + esc(t.status_label || label(t.status)) + '</span></td>' +
+                '<td>' + vnc(t.vnc) + '</td>' +
                 '<td class="up-data">' + esc(t.submitted) + '</td>' +
                 '<td class="up-data up-num" style="color: var(--up-text)">' + esc(t.duration) + '</td>' +
                 '<td class="up-row-actions">' + actions(t) + '</td>' +
@@ -74,7 +81,7 @@
             if (!empty) {
                 empty = document.createElement('tr');
                 empty.id = 'queue-nomatch';
-                empty.innerHTML = '<td colspan="6" class="up-empty">No tasks match this filter.</td>';
+                empty.innerHTML = '<td colspan="7" class="up-empty">No tasks match this filter.</td>';
                 body.appendChild(empty);
             }
         } else if (empty) {

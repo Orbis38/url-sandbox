@@ -313,3 +313,28 @@ def test_report_offers_retry_without_tor_with_the_same_options(env):
     sent = dispatched[-1]['args'][0]
     assert sent['use_proxy'] is False and sent['take_full_screenshot'] is True
     assert sent['buffer'] == 'https://pippo.com' and sent['scheme_fallback'] is True and sent['url_timeout'] == 10
+
+
+def test_queue_reports_live_session_state(env, tmp_path):
+    import json
+    web, db, alice, _, _ = env
+    def add(interactive, status, files=None):
+        task = str(uuid4())
+        db.taskdblogs.insert_one({'task': task, 'owner_id': str(alice.id), 'start': datetime.utcnow(),
+                                  'end': None if status in ('queued', 'running') else datetime.utcnow(),
+                                  'logs': [], 'status': status, 'interactive': interactive, 'buffer': 'https://example.com'})
+        for name, content in (files or {}).items():
+            (tmp_path / task).mkdir(exist_ok=True)
+            (tmp_path / task / name).write_text(content)
+        return task
+    expected = {
+        add(False, 'completed'): 'none',
+        add(True, 'running'): 'starting',
+        add(True, 'completed', {'control.sock': '', 'vnc_session.json': json.dumps({'status': 'active'})}): 'active',
+        add(True, 'completed', {'control.sock': '', 'vnc_session.json': json.dumps({'status': 'ended'})}): 'inactive',
+        add(True, 'failed'): 'inactive',
+    }
+    rows = logged_in(web, alice).post('/queue/', json={}).json['tasks']
+    assert {row['task']: row['vnc'] for row in rows} == expected
+    page = logged_in(web, alice).get('/queue/').data.decode()
+    assert 'Not requested' in page and 'up-vnc-active' in page and '<th scope="col">VNC</th>' in page
