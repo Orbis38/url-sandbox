@@ -330,3 +330,26 @@ def test_full_screenshot_captures_beyond_the_viewport():
         capture = calls[1][1]
         assert capture['captureBeyondViewport'] is True
         assert capture['clip']['height'] == expected and capture['clip']['width'] == 1440
+
+
+def test_page_counts_as_loaded_only_if_the_site_answered_the_document():
+    from tinydb.storages import MemoryStorage
+    namespace = load_functions('box/qbsandbox.py', ['got_document_response', 'record_page_load'], {'loads': json.loads})
+    def event(method, params):
+        return {'message': json.dumps({'message': {'method': method, 'params': params}})}
+    answered = [event('Network.requestWillBeSent', {'type': 'Document', 'request': {'url': 'https://site.example/'}}),
+                event('Network.responseReceived', {'type': 'Document', 'response': {'status': 403}})]
+    no_answer = [event('Network.requestWillBeSent', {'type': 'Document', 'request': {'url': 'https://site.example/'}}),
+                 event('Network.loadingFailed', {'type': 'Document', 'errorText': 'net::ERR_SOCKS_CONNECTION_FAILED'})]
+    cases = [
+        ('https://site.example/', answered, True),     # any HTTP status is an answer
+        ('https://site.example/', no_answer, False),   # Chrome error page reported under the target URL
+        ('data:,', answered, False),                   # never left the start page
+    ]
+    for url, logs, expected in cases:
+        db = TinyDB(storage=MemoryStorage)
+        table = db.table('extracted_table')
+        table.insert({'reachability': {'reachable': False, 'via_tor': True, 'tor_ok': True}})
+        namespace['record_page_load'](SimpleNamespace(current_url=url), table, logs)
+        record = table.all()[0]['reachability']
+        assert record['page_loaded'] is expected and record['via_tor'] is True

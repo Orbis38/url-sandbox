@@ -464,15 +464,32 @@ def capture_full_page_png(driver):
         return driver.find_element(By.TAG_NAME, 'html').screenshot_as_png
 
 
-def record_page_load(driver, extracted_table):
+def got_document_response(performance_logs):
     '''
-    did the browser leave its start page? on a load timeout it stays on data:, (blank)
+    did the site answer the page request at all? (any HTTP status counts as an answer)
+    '''
+    for event in performance_logs or []:
+        try:
+            message = loads(event['message'])['message']
+            if message['method'] == 'Network.responseReceived' and message['params'].get('type') == 'Document':
+                return True
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    return False
+
+
+def record_page_load(driver, extracted_table, performance_logs):
+    '''
+    did the page load? On a load timeout Chrome stays on data:, but on a network error it
+    shows its own error page, which WebDriver may report under the target URL, so the
+    URL alone is not enough: the site must also have answered the document request.
     '''
     try:
         url = driver.current_url or ''
     except Exception:
         url = ''
-    loaded = bool(url) and not url.startswith(('data:', 'about:blank', 'chrome-error:'))
+    left_start_page = bool(url) and not url.startswith(('data:', 'about:blank', 'chrome-error:'))
+    loaded = left_start_page and got_document_response(performance_logs)
     found = extracted_table.search(lambda row: 'reachability' in row)
     if found:
         record = dict(found[0]['reachability'], page_loaded=loaded)
@@ -778,10 +795,10 @@ def chrome_driver(parsed, analyzer_db):
             chromebrowser.get(parsed["buffer"])
         except BaseException:
             pass
-    record_page_load(chromebrowser, extracted_table)
     if parsed.get('block_cookies'):
         dismiss_cookie_banners(chromebrowser, settle=0 if parsed.get('interactive') else 0.6)
     performance_logs = chromebrowser.get_log('performance')
+    record_page_load(chromebrowser, extracted_table, performance_logs)
     get_all_links(chromebrowser.page_source, extracted_table)
     get_all_scripts(chromebrowser.page_source, extracted_table)
     extract_phishing_heuristics(chromebrowser, parsed, extracted_table)
