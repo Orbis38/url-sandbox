@@ -148,10 +148,13 @@ def test_traversal_rejected_before_filesystem_access(env):
     assert client.get('/live_interact/../status').status_code == 404
 
 
-def test_owner_can_read_reports_and_vnc_ticket(env, tmp_path):
-    import json
+def test_owner_can_read_reports_and_vnc_ticket(env, monkeypatch):
+    import json, socket, tempfile
+    from pathlib import Path
     from gridfs import GridFS
     web, db, alice, bob, _ = env
+    tmp_path = Path(tempfile.mkdtemp(prefix='vnc', dir='/tmp'))  # AF_UNIX paths are limited to ~108 bytes
+    monkeypatch.setitem(web.json_settings['docker'], 'output_folder', str(tmp_path))
     task = add_task(db, alice)
     fs = GridFS(db)
     fs.put(b'<html><body>PRIVATE_REPORT</body></html>', task=task, content_type='text/html')
@@ -159,7 +162,9 @@ def test_owner_can_read_reports_and_vnc_ticket(env, tmp_path):
            task=task, content_type='application/json')
     task_dir = tmp_path / task
     task_dir.mkdir()
-    (task_dir / 'control.sock').touch()
+    box = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)  # a live session answers its control socket
+    box.bind(str(task_dir / 'control.sock'))
+    box.listen(4)
     (task_dir / 'vnc_session.json').write_text(json.dumps({'status': 'active', 'vnc_token': 'secret-ticket', 'vnc_port': 6081}))
     (task_dir / 'session.mp4').write_bytes(b'VIDEO')
     client = logged_in(web, alice)
@@ -168,6 +173,9 @@ def test_owner_can_read_reports_and_vnc_ticket(env, tmp_path):
     assert client.get('/api/v1/tasks/' + task + '/video').data == b'VIDEO'
     assert client.get('/live_interact/' + task + '/status').json['vnc_token'] == 'secret-ticket'
     assert logged_in(web, bob).get('/live_interact/' + task + '/status').status_code == 404
+    box.close()
+    # the box is gone but its files remain: the ticket is no longer handed out
+    assert client.get('/live_interact/' + task + '/status').json['active'] is False
 
 
 def test_worker_logger_does_not_duplicate_or_replace_owner(env):

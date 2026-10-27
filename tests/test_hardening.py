@@ -315,9 +315,12 @@ def test_report_offers_retry_without_tor_with_the_same_options(env):
     assert sent['buffer'] == 'https://pippo.com' and sent['scheme_fallback'] is True and sent['url_timeout'] == 10
 
 
-def test_queue_reports_live_session_state(env, tmp_path):
-    import json
+def test_queue_reports_live_session_state(env, monkeypatch):
+    import json, socket, tempfile
     web, db, alice, _, _ = env
+    tmp_path = Path(tempfile.mkdtemp(prefix='vnc', dir='/tmp'))  # AF_UNIX paths are limited to ~108 bytes
+    monkeypatch.setitem(web.json_settings['docker'], 'output_folder', str(tmp_path))
+    listeners = []
     def add(interactive, status, files=None):
         task = str(uuid4())
         db.taskdblogs.insert_one({'task': task, 'owner_id': str(alice.id), 'start': datetime.utcnow(),
@@ -325,16 +328,26 @@ def test_queue_reports_live_session_state(env, tmp_path):
                                   'logs': [], 'status': status, 'interactive': interactive, 'buffer': 'https://example.com'})
         for name, content in (files or {}).items():
             (tmp_path / task).mkdir(exist_ok=True)
-            (tmp_path / task / name).write_text(content)
+            if name == 'control.sock' and content == 'listening':
+                server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                server.bind(str(tmp_path / task / name))
+                server.listen(4)
+                listeners.append(server)
+            else:
+                (tmp_path / task / name).write_text(content)
         return task
     expected = {
         add(False, 'completed'): 'none',
         add(True, 'running'): 'starting',
-        add(True, 'completed', {'control.sock': '', 'vnc_session.json': json.dumps({'status': 'active'})}): 'active',
-        add(True, 'completed', {'control.sock': '', 'vnc_session.json': json.dumps({'status': 'ended'})}): 'inactive',
+        add(True, 'completed', {'control.sock': 'listening', 'vnc_session.json': json.dumps({'status': 'active'})}): 'active',
+        # box removed from outside: files still say "active" but nothing answers the socket
+        add(True, 'completed', {'control.sock': '', 'vnc_session.json': json.dumps({'status': 'active'})}): 'inactive',
+        add(True, 'completed', {'control.sock': 'listening', 'vnc_session.json': json.dumps({'status': 'ended'})}): 'inactive',
         add(True, 'failed'): 'inactive',
     }
     rows = logged_in(web, alice).post('/queue/', json={}).json['tasks']
     assert {row['task']: row['vnc'] for row in rows} == expected
     page = logged_in(web, alice).get('/queue/').data.decode()
     assert 'Not requested' in page and 'up-vnc-active' in page and '<th scope="col">VNC</th>' in page
+    for server in listeners:
+        server.close()

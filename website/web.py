@@ -474,10 +474,28 @@ def split_target(target):
 VNC_LABELS = {'active': 'Active', 'starting': 'Starting', 'inactive': 'Inactive', 'none': 'Not requested'}
 
 
+def socket_listening(socket_path):
+    '''
+    is a sandbox still serving this control socket? The file outlives a box that was removed
+    from outside (run.sh restart, docker rm -f), so only an accepted connection counts. The box
+    drops an empty connection at once and it does not reset the session's idle timer.
+    '''
+    import socket
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(0.5)
+    try:
+        probe.connect(socket_path)
+        return True
+    except OSError:
+        return False
+    finally:
+        probe.close()
+
+
 def read_vnc_session(task_id):
     '''
     live-session files the box writes into the task's output folder: saved metadata and
-    whether its control socket is still there
+    whether its control socket still answers
     '''
     import json
     output_dir = path.join(json_settings[environ["project_env"]]["output_folder"], task_id)
@@ -485,8 +503,9 @@ def read_vnc_session(task_id):
     with ignore_exception(Exception):
         with open(path.join(output_dir, "vnc_session.json")) as handle:
             saved = json.load(handle)
-    socket_alive = path.exists(path.join(output_dir, "control.sock"))
-    return saved, socket_alive, socket_alive and saved.get("status") != "ended", output_dir
+    socket_file = path.join(output_dir, "control.sock")
+    socket_alive = path.exists(socket_file) and saved.get("status") != "ended" and socket_listening(socket_file)
+    return saved, socket_alive, socket_alive, output_dir
 
 
 def vnc_state(task_id, interactive, status):
