@@ -69,6 +69,15 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
 
+  mailbox:
+    # image only: the worker starts one short-lived, network-less container per email
+    build:
+      context: .
+      dockerfile: ./mailbox-Dockerfile
+    image: url-sandbox-mailbox
+    network_mode: none
+    restart: "no"
+
   maintenance:
     image: url-sandbox-workers_api
     command: python maintenance.py

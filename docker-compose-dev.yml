@@ -90,6 +90,17 @@ services:
     logging:
       driver: none
 
+  mailbox:
+    # image only: the worker starts one short-lived, network-less container per email
+    build:
+      context: .
+      dockerfile: ./mailbox-Dockerfile
+    image: url-sandbox-mailbox
+    network_mode: none
+    restart: "no"
+    logging:
+      driver: none
+
   redis:
     image: redis
     container_name: url-sandbox_redis

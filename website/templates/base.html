@@ -444,6 +444,13 @@ details.up-details[open] > summary .up-chev { transform: rotate(90deg); }
 }
 .up-segmented button:hover { color: var(--up-text); }
 .up-segmented button[aria-pressed='true'] { background: var(--up-border-soft); color: var(--up-text); }
+.up-segmented a {
+     display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 6px;
+     color: var(--up-text-mid) !important; font-weight: 600;
+}
+.up-segmented a:hover { color: var(--up-text) !important; }
+.up-segmented a[aria-current='page'] { background: var(--up-border-soft); color: var(--up-text) !important; }
+.up-kind-switch { align-self: flex-start; width: fit-content; max-width: 100%; }
 .up-search { position: relative; margin-left: auto; flex: 0 1 300px; min-width: 200px; }
 .up-search svg { position: absolute; left: 12px; top: 13px; pointer-events: none; }
 .up-search input { height: 36px !important; padding-left: 34px !important; border-radius: 8px !important; }

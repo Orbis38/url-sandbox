@@ -4,3 +4,4 @@ mongomock
 websockify
 websocket-client
 tinydb
+tldextract

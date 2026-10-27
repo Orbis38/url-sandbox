@@ -1,0 +1,383 @@
+{% extends 'admin/master.html' %}
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" href="/static/email.css">
+{% endblock %}
+{% macro addresses(items) -%}
+{% for a in items %}<span class="up-addr" title="{{ a.address }}">{% if a.name %}{{ a.name }} {% endif %}<span class="up-mono">&lt;{{ a.address }}&gt;</span></span>{% if not loop.last %}, {% endif %}{% endfor %}
+{%- endmacro %}
+{% macro auth_tile(name, value) -%}
+{% set state = 'good' if value == 'pass' else ('bad' if value in ['fail', 'softfail', 'hardfail', 'permerror', 'temperror'] else 'none') %}
+<div class="up-auth-tile is-{{ state }}">
+   <span class="up-auth-name">{{ name }}</span>
+   <span class="up-auth-value">{{ value or 'not reported' }}</span>
+</div>
+{%- endmacro %}
+{% block page_header %}
+<header class="up-report-head">
+   <nav aria-label="Breadcrumb" class="up-breadcrumb">
+      <a href="/queue/">Task Queue</a>
+      <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      <span class="up-mono" title="{{ task_id }}">{{ task_id[:8] }}</span>
+   </nav>
+   <div class="up-report-title-row">
+      <div class="up-report-title-main">
+         <div class="up-report-title">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--up-text-mid)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+            <h1 class="up-mail-title" title="{{ run.target }}">{{ run.target }}</h1>
+         </div>
+         <div class="up-report-meta">
+            <span class="up-pill up-pill-{{ run.status }}" id="run-status"><span class="up-pill-dot"></span><span>{{ run.status_label }}</span></span>
+            {% if run.filename %}<span class="up-mono" style="font-size: 12px">{{ run.filename }}</span>{% endif %}
+            {% if run.started %}<span class="up-sep" aria-hidden="true">•</span><span>{{ run.started }}</span>{% endif %}
+            {% if run.duration %}<span class="up-sep" aria-hidden="true">•</span><span>{{ 'elapsed' if run.status in ['queued', 'running'] else 'ran' }} <span id="run-elapsed" data-seconds="{{ run.elapsed_seconds }}">{{ run.duration }}</span></span>{% endif %}
+         </div>
+         {% if run.error %}
+         <p class="up-report-error">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            {{ run.error }}
+         </p>
+         {% endif %}
+      </div>
+      <div class="up-topbar-actions">
+         <a href="/tasklog/{{ task_id }}" class="up-btn up-btn-ghost" style="height: 36px; padding: 0 14px !important">View logs</a>
+         <a href="/report/{{ task_id }}/original" class="up-btn up-btn-ghost" style="height: 36px; padding: 0 14px !important" title="Download the uploaded message file">Original</a>
+         {% if mail %}
+         <a href="/report/{{ task_id }}/iocs.csv" class="up-btn up-btn-ghost" style="height: 36px; padding: 0 14px !important">IOCs CSV</a>
+         <a href="/report/{{ task_id }}/json" class="up-btn up-btn-primary" style="height: 36px; padding: 0 14px !important" target="_blank">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Export JSON
+         </a>
+         {% endif %}
+      </div>
+   </div>
+</header>
+{% endblock %}
+{% block body %}
+{{ super() }}
+{% set m = mail.message or {} %}
+{% set flagged = (mail.indicators or [])|map(attribute='id')|list %}
+<div class="up-report-split" data-task="{{ task_id }}" data-status="{{ run.status }}">
+   <div class="up-report-content">
+      {% if mail %}
+      <div class="up-tabs" role="tablist" aria-label="Email report sections" id="report-tabs">
+         <button type="button" role="tab" class="up-tab" id="tab-message" aria-controls="panel-message" aria-selected="true">Message</button>
+         <button type="button" role="tab" class="up-tab" id="tab-headers" aria-controls="panel-headers" aria-selected="false" tabindex="-1">Headers <span class="up-tab-count">{{ (mail.received or [])|length or '' }}</span></button>
+         <button type="button" role="tab" class="up-tab" id="tab-links" aria-controls="panel-links" aria-selected="false" tabindex="-1">Links <span class="up-tab-count">{{ (mail.links or [])|length or '' }}</span></button>
+         <button type="button" role="tab" class="up-tab" id="tab-attachments" aria-controls="panel-attachments" aria-selected="false" tabindex="-1">Attachments <span class="up-tab-count">{{ (mail.attachments or [])|length or '' }}</span></button>
+         <button type="button" role="tab" class="up-tab" id="tab-source" aria-controls="panel-source" aria-selected="false" tabindex="-1">Source</button>
+      </div>
+
+      {# ── Message: what the recipient saw ─────────────────────────── #}
+      <div class="up-tabpanel" role="tabpanel" id="panel-message" aria-labelledby="tab-message">
+         <article class="up-mail">
+            <header class="up-mail-head">
+               <h2 class="up-mail-subject">{{ m.subject or '(no subject)' }}</h2>
+               <div class="up-mail-from">
+                  <span class="up-mail-avatar" aria-hidden="true">{{ ((m['from'] or {}).name or (m['from'] or {}).address or '?')[:1]|upper }}</span>
+                  <div class="up-mail-who">
+                     <div class="up-mail-sender">
+                        <strong>{{ (m['from'] or {}).name or (m['from'] or {}).address or 'Unknown sender' }}</strong>
+                        {% if (m['from'] or {}).address %}<span class="up-mono">&lt;{{ m['from'].address }}&gt;</span>{% endif %}
+                        {% if 'display_name_spoof' in flagged %}<span class="up-flag is-bad">display name is another address</span>{% endif %}
+                     </div>
+                     <dl class="up-mail-meta">
+                        {% if m.to %}<div><dt>To</dt><dd>{{ addresses(m.to) }}</dd></div>{% endif %}
+                        {% if m.cc %}<div><dt>Cc</dt><dd>{{ addresses(m.cc) }}</dd></div>{% endif %}
+                        {% if m.reply_to %}<div><dt>Reply-To</dt><dd>{{ addresses(m.reply_to) }}{% if 'reply_to_mismatch' in flagged %} <span class="up-flag is-warn">different domain</span>{% endif %}</dd></div>{% endif %}
+                        {% if m.sender %}<div><dt>Sender</dt><dd>{{ addresses([m.sender]) }}</dd></div>{% endif %}
+                        {% if m.date %}<div><dt>Date</dt><dd>{{ m.date }}</dd></div>{% endif %}
+                     </dl>
+                  </div>
+               </div>
+               {% set visible = (mail.attachments or [])|rejectattr('inline')|list %}
+               {% if visible %}
+               <ul class="up-mail-attachments" aria-label="Attachments">
+                  {% for a in visible %}
+                  {% set risky = (a.flags or [])|select('in', risky_flags)|list %}
+                  <li><button type="button" class="up-attach-chip{% if risky %} is-risky{% endif %}" data-goto-tab="tab-attachments" title="{{ a.detected_label }}">
+                     <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+                     <span class="up-attach-name">{{ a.filename or '(unnamed)' }}</span>
+                     <span class="up-attach-size">{{ a.size|filesizeformat }}</span>
+                  </button></li>
+                  {% endfor %}
+               </ul>
+               {% endif %}
+            </header>
+            {% if (mail.remote_content or {}).count %}
+            <div class="up-mail-banner" role="note">
+               <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10 10 0 0 1 6.1 6.1M2 2l20 20M9.9 4.2A10 10 0 0 1 19.8 14"/></svg>
+               <span><strong>{{ mail.remote_content.count }} remote resource{{ 's' if mail.remote_content.count != 1 }} blocked</strong> — images, styles and tracking pixels are never loaded from your browser{% if mail.remote_content.hosts %}: <span class="up-mono">{{ mail.remote_content.hosts[:4]|join(', ') }}{% if mail.remote_content.hosts|length > 4 %} +{{ mail.remote_content.hosts|length - 4 }}{% endif %}</span>{% endif %}.</span>
+            </div>
+            {% endif %}
+            {% if mail.forms %}
+            <div class="up-mail-banner is-bad" role="note">
+               <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg>
+               <span><strong>The message contains a form.</strong> It is shown but cannot submit anything.</span>
+            </div>
+            {% endif %}
+            <div class="up-mail-frame">
+               <iframe id="mail-frame" src="/report/{{ task_id }}/message" sandbox="allow-same-origin" referrerpolicy="no-referrer" title="Email body, rendered without scripts or remote content"></iframe>
+            </div>
+            <p class="up-mail-foot">Links in the message do not navigate: click one to see where it really leads and open it in the sandbox.</p>
+         </article>
+      </div>
+
+      {# ── Headers: authentication, relay path, raw headers ─────────── #}
+      {% set auth = mail.authentication or {} %}
+      <div class="up-tabpanel" role="tabpanel" id="panel-headers" aria-labelledby="tab-headers" hidden>
+         <section class="up-card up-mail-section">
+            <div class="up-card-head"><h2 class="up-card-title">Authentication</h2></div>
+            <div class="up-auth-grid">
+               {{ auth_tile('SPF', auth.spf) }}
+               {{ auth_tile('DKIM', auth.dkim) }}
+               {{ auth_tile('DMARC', auth.dmarc) }}
+            </div>
+            {% if auth.dkim_signatures %}
+            <p class="up-mail-note">DKIM signed by {% for s in auth.dkim_signatures %}<span class="up-mono">{{ s.domain }}</span>{% if s.selector %} (selector <span class="up-mono">{{ s.selector }}</span>){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+            {% endif %}
+            {% for line in auth.raw or [] %}<pre class="up-mail-pre">{{ line }}</pre>{% endfor %}
+         </section>
+         <section class="up-card up-mail-section">
+            <div class="up-card-head"><h2 class="up-card-title">Relay path</h2><span class="up-card-count">{{ (mail.received or [])|length }} hop{{ 's' if (mail.received or [])|length != 1 }}, origin first</span></div>
+            {% if mail.received %}
+            <div class="up-table-scroll">
+               <table class="up-table up-mail-table">
+                  <thead><tr><th>#</th><th>From</th><th>By</th><th>With</th><th>Date</th><th class="up-num">Delay</th></tr></thead>
+                  <tbody>
+                  {% for hop in mail.received %}
+                  <tr>
+                     <td class="up-data">{{ hop.index }}</td>
+                     <td class="up-mono up-wrap">{{ hop['from'] or '—' }}{% for ip in hop.public_ips %} <span class="up-flag">{{ ip }}</span>{% endfor %}</td>
+                     <td class="up-mono up-wrap">{{ hop.by or '—' }}</td>
+                     <td class="up-data">{{ hop['with'] or '—' }}</td>
+                     <td class="up-data">{{ hop.date or '—' }}</td>
+                     <td class="up-data up-num">{% if hop.delay_seconds is not none %}{{ hop.delay_seconds }}s{% else %}—{% endif %}</td>
+                  </tr>
+                  {% endfor %}
+                  </tbody>
+               </table>
+            </div>
+            {% else %}
+            <p class="up-mail-note">No Received headers{% if mail.format == 'msg' %} — the .msg file does not carry transport headers{% endif %}.</p>
+            {% endif %}
+         </section>
+         <section class="up-card up-mail-section">
+            <div class="up-card-head"><h2 class="up-card-title">All headers <span class="up-mail-sub" style="display: inline; margin-left: 6px">as received, not decoded</span></h2><span class="up-card-count">{{ (mail.headers or [])|length }}</span></div>
+            <div class="up-table-scroll up-mail-headers">
+               <table class="up-table up-mail-table">
+                  <tbody>
+                  {% for name, value in mail.headers or [] %}
+                  <tr><th scope="row" class="up-mono" style="text-transform: none; letter-spacing: 0">{{ name }}</th><td class="up-mono up-wrap">{{ value }}</td></tr>
+                  {% else %}
+                  <tr><td class="up-empty">No headers.</td></tr>
+                  {% endfor %}
+                  </tbody>
+               </table>
+            </div>
+         </section>
+      </div>
+
+      {# ── Links ────────────────────────────────────────────────────── #}
+      <div class="up-tabpanel" role="tabpanel" id="panel-links" aria-labelledby="tab-links" hidden>
+         <section class="up-card up-mail-section">
+            {% if mail.links %}
+            <div class="up-table-scroll">
+               <table class="up-table up-mail-table">
+                  <thead><tr><th>Shown as</th><th>Leads to</th><th>Flags</th><th>Sandbox</th></tr></thead>
+                  <tbody>
+                  {% for link in mail.links %}
+                  {% set child = children.get(link.target) %}
+                  <tr>
+                     <td class="up-wrap" style="max-width: 260px">{{ link.display or '—' }}</td>
+                     <td class="up-mono up-wrap" style="font-size: 12px">
+                        {{ link.target }}
+                        {% if link.target != link.url %}<span class="up-mail-sub">via {{ link.url[:120] }}{% if link.url|length > 120 %}…{% endif %}</span>{% endif %}
+                     </td>
+                     <td>{% for flag in link.flags %}<span class="up-flag{% if flag in risky_flags %} is-bad{% endif %}">{{ link_flag_labels.get(flag, flag) }}</span>{% endfor %}</td>
+                     <td class="up-row-actions" style="white-space: nowrap">
+                        {% if child %}<a class="up-link up-link-primary" href="/report/{{ child.task }}" target="_blank">{{ child.status_label }}</a>{% endif %}
+                        {% if link.target.lower().startswith(('http://', 'https://')) %}
+                        <button type="button" class="up-link" data-analyze="{{ link.id }}">Analyze</button>
+                        <button type="button" class="up-link" data-analyze="{{ link.id }}" data-live="1" title="Analyze with a live browser session (VNC)">Live</button>
+                        {% endif %}
+                        <button type="button" class="up-link" data-copy="{{ link.target }}">Copy</button>
+                     </td>
+                  </tr>
+                  {% endfor %}
+                  </tbody>
+               </table>
+            </div>
+            {% else %}
+            <div class="up-empty-box"><strong>No links</strong><span>The message body contains no links.</span></div>
+            {% endif %}
+         </section>
+      </div>
+
+      {# ── Attachments ──────────────────────────────────────────────── #}
+      <div class="up-tabpanel" role="tabpanel" id="panel-attachments" aria-labelledby="tab-attachments" hidden>
+         <section class="up-card up-mail-section">
+            {% if mail.attachments %}
+            <div class="up-table-scroll">
+               <table class="up-table up-mail-table">
+                  <thead><tr><th>Name</th><th>Type</th><th class="up-num">Size</th><th>Hashes</th><th>Flags</th></tr></thead>
+                  <tbody>
+                  {% for a in mail.attachments %}
+                  <tr>
+                     <td class="up-wrap up-mail-name">
+                        {{ a.filename or '(unnamed)' }}
+                        {% if a.inline %}<span class="up-mail-sub">inline{% if a.content_id %} · cid:{{ a.content_id }}{% endif %}</span>{% endif %}
+                        {% if a.embedded_message %}<span class="up-mail-sub">attached message: {{ a.embedded_message }}</span>{% endif %}
+                     </td>
+                     <td style="font-size: 12px">{{ a.detected_label }}<span class="up-mail-sub up-mono">{{ a.content_type }}</span></td>
+                     <td class="up-data up-num" style="white-space: nowrap">{{ a.size|filesizeformat }}</td>
+                     <td class="up-mono" style="font-size: 11.5px">
+                        <span class="up-hash"><span>SHA256</span> {{ a.sha256 }} <button type="button" class="up-icon-btn" data-copy="{{ a.sha256 }}" aria-label="Copy SHA-256" title="Copy SHA-256"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button></span>
+                        <span class="up-hash"><span>SHA1</span> {{ a.sha1 }}</span>
+                        <span class="up-hash"><span>MD5</span> {{ a.md5 }}</span>
+                     </td>
+                     <td>{% for flag in a.flags %}<span class="up-flag{% if flag in risky_flags %} is-bad{% endif %}">{{ attachment_flag_labels.get(flag, flag) }}</span>{% else %}<span style="color: var(--up-muted)">—</span>{% endfor %}</td>
+                  </tr>
+                  {% endfor %}
+                  </tbody>
+               </table>
+            </div>
+            <p class="up-mail-note">Attachments are hashed and typed by content, never opened. Look the hashes up in your threat-intelligence tools.</p>
+            {% else %}
+            <div class="up-empty-box"><strong>No attachments</strong><span>The message carries no attachments.</span></div>
+            {% endif %}
+         </section>
+      </div>
+
+      {# ── Source ───────────────────────────────────────────────────── #}
+      <div class="up-tabpanel" role="tabpanel" id="panel-source" aria-labelledby="tab-source" hidden>
+         {% set body = mail.body or {} %}
+         <details class="up-card up-mail-source" {% if not body.has_html %}open{% endif %}>
+            <summary>Plain text{% if not body.has_text %} <span class="up-mail-sub">not present</span>{% endif %}</summary>
+            {% if body.has_text %}<pre class="up-mail-pre">{{ body.text }}{% if body.text_truncated %}
+
+[truncated]{% endif %}</pre>{% endif %}
+         </details>
+         <details class="up-card up-mail-source" {% if body.has_html %}open{% endif %}>
+            <summary>HTML source{% if not body.has_html %} <span class="up-mail-sub">not present</span>{% endif %}</summary>
+            {% if body.has_html %}<pre class="up-mail-pre">{{ body.html_source }}{% if body.html_truncated %}
+
+[truncated]{% endif %}</pre>{% endif %}
+         </details>
+         <details class="up-card up-mail-source">
+            <summary>MIME structure</summary>
+            <pre class="up-mail-pre">{% for part in mail.mime_tree or [] %}{{ '   ' * part.depth }}{{ part.content_type }}{% if part.filename %}  "{{ part.filename }}"{% endif %}{% if part.disposition %}  [{{ part.disposition }}]{% endif %}  {{ part.size|filesizeformat }}
+{% endfor %}</pre>
+         </details>
+      </div>
+      {% else %}
+      {% if run.status in ['queued', 'running'] %}
+      <div class="up-empty-box" role="status">
+         <span class="taskspinner" aria-hidden="true" style="margin: 0 0 6px"></span>
+         <strong id="run-wait-title">{{ 'Waiting for a free worker' if run.status == 'queued' else 'Parsing the message' }}&hellip;</strong>
+         <span>This page refreshes by itself when the analysis finishes. View logs shows live progress.</span>
+      </div>
+      {% else %}
+      <div class="up-empty-box">
+         <strong>No report is available for this email</strong>
+         <span>The message could not be analyzed. Check the logs for what happened.</span>
+      </div>
+      {% endif %}
+      {% endif %}
+   </div>
+
+   <aside class="up-rail" aria-label="Email findings">
+      <div class="up-rail-head"><span class="up-overline" style="color: var(--up-text-mid)">Findings</span></div>
+      {% if mail %}
+      <section class="up-rail-section">
+         <h2>Verdict</h2>
+         <span class="up-verdict is-{{ mail.verdict }}">{{ verdict_labels.get(mail.verdict, mail.verdict) }}</span>
+         {% if mail.indicators %}
+         <ul class="up-indicators">
+            {% for item in mail.indicators %}
+            <li class="is-{{ item.severity }}">
+               <span class="up-sev">{{ severity_labels.get(item.severity, item.severity) }}</span>
+               <div>
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.description }}</span>
+                  {% if item.detail %}<code>{{ item.detail }}</code>{% endif %}
+               </div>
+            </li>
+            {% endfor %}
+         </ul>
+         {% else %}
+         <p style="margin: 8px 0 0; font-size: 12px; color: var(--up-muted)">No indicator was triggered. That does not make the message safe: read it and check its links.</p>
+         {% endif %}
+      </section>
+      <section class="up-rail-section">
+         <h2>File</h2>
+         <dl class="up-facts">
+            <div class="up-fact"><dt>Format</dt><dd>{{ '.msg (Outlook)' if mail.format == 'msg' else '.eml (RFC 822)' }}</dd></div>
+            <div class="up-fact"><dt>Size</dt><dd>{{ mail.size|filesizeformat }}</dd></div>
+            <div class="up-fact is-stacked"><dt>SHA-256</dt><dd class="up-mono" style="font-size: 11.5px; overflow-wrap: anywhere">{{ (mail.hashes or {}).sha256 }}</dd></div>
+            {% if mail.mailer %}<div class="up-fact"><dt>Mailer</dt><dd class="up-clamp-2">{{ mail.mailer }}</dd></div>{% endif %}
+            {% if mail.originating_ip %}<div class="up-fact"><dt>Originating IP</dt><dd class="up-mono" style="font-size: 12px">{{ mail.originating_ip }}</dd></div>{% endif %}
+            {% if m.message_id %}<div class="up-fact is-stacked"><dt>Message-ID</dt><dd class="up-mono" style="font-size: 11.5px; overflow-wrap: anywhere">{{ m.message_id }}</dd></div>{% endif %}
+         </dl>
+      </section>
+      <section class="up-rail-section">
+         <h2>Indicators of compromise</h2>
+         <dl class="up-facts">
+            {% for key, label in [('urls', 'URLs'), ('domains', 'Domains'), ('ips', 'IP addresses'), ('emails', 'Email addresses'), ('sha256', 'File hashes')] %}
+            <div class="up-fact"><dt>{{ label }}</dt><dd class="up-mono" style="font-size: 12px">{{ ((mail.iocs or {})[key] or [])|length }}</dd></div>
+            {% endfor %}
+         </dl>
+         <div class="up-rail-foot"><a href="/report/{{ task_id }}/iocs.csv">Download as CSV</a> · <a href="/report/{{ task_id }}/json" target="_blank">full JSON</a></div>
+      </section>
+      {% else %}
+      <section class="up-rail-section">
+         <p style="margin: 0; font-size: 12px; color: var(--up-muted)">Findings appear once the message is parsed.</p>
+      </section>
+      {% endif %}
+   </aside>
+</div>
+
+{% if mail %}
+<script type="application/json" id="email-links">{{ (mail.links or [])|tojson }}</script>
+<script type="application/json" id="email-link-flags">{{ {'labels': link_flag_labels, 'risky': risky_flags|list}|tojson }}</script>
+<form id="sandbox-form" method="POST" action="/url/" target="_blank" hidden>
+   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+   <input type="hidden" name="buffer" value="">
+   <input type="hidden" name="choices" value="use_proxy">
+   <input type="hidden" name="choices" value="take_screenshot">
+   <input type="hidden" name="choices" value="block_cookies">
+   <input type="hidden" name="choices" value="interactive" disabled>
+   <input type="hidden" name="useragents" value="Chrome">
+   <input type="hidden" name="urltimeout" value="{{ url_defaults.urltimeout }}">
+   <input type="hidden" name="analyzertimeout" value="{{ url_defaults.analyzertimeout }}">
+   <input type="hidden" name="interactivetimeout" value="300">
+   <input type="hidden" name="parent_task" value="{{ task_id }}">
+   <input type="hidden" name="submitandwait" value="Analyze &amp; Wait">
+</form>
+<div class="up-linkpop" id="link-pop" role="dialog" aria-modal="false" aria-labelledby="link-pop-title" hidden>
+   <div class="up-linkpop-head">
+      <strong id="link-pop-title">Where this link leads</strong>
+      <button type="button" class="up-icon-btn" data-pop-close aria-label="Close">
+         <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+   </div>
+   <dl class="up-linkpop-body">
+      <dt>Shown as</dt><dd data-pop="display"></dd>
+      <dt>Leads to</dt><dd class="up-mono" data-pop="target"></dd>
+      <dt data-pop-wrapped>Original (wrapped)</dt><dd class="up-mono" data-pop="url" data-pop-wrapped></dd>
+   </dl>
+   <div class="up-linkpop-flags" data-pop="flags"></div>
+   <div class="up-linkpop-actions">
+      <button type="button" class="up-btn up-btn-primary up-btn-sm" data-pop-analyze>Analyze in sandbox</button>
+      <button type="button" class="up-btn up-btn-secondary up-btn-sm" data-pop-analyze data-live="1">Live session</button>
+      <button type="button" class="up-btn up-btn-ghost up-btn-sm" data-pop-copy>Copy URL</button>
+   </div>
+   <p class="up-linkpop-note" data-pop-noweb>Not a web link: it cannot be opened in the sandbox.</p>
+</div>
+{% endif %}
+{% endblock body %}
+{% block tail_js %}
+{{ super() }}
+<script src="/static/report.js"></script>
+<script src="/static/email_report.js"></script>
+{% endblock %}

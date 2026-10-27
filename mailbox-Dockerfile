@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+COPY mailbox-requirements.txt .
+RUN pip install --no-cache-dir -r mailbox-requirements.txt
+ADD ./mailbox /mailbox
+WORKDIR /mailbox
+# Parses untrusted messages: run unprivileged (the worker also drops all capabilities,
+# disables the network and mounts the root filesystem read-only).
+USER 65534:65534
+ENTRYPOINT ["python", "run.py"]

@@ -26,6 +26,7 @@
 {% set switches = {} %}
 {% for subfield in form.choices %}{% set _ = switches.update({subfield.data: subfield}) %}{% endfor %}
 <div class="up-page">
+   {% include 'analysis_kind.html' %}
    <div class="up-cols">
       <form method="POST" action="" enctype="multipart/form-data" class="up-card up-col-main">
          <div class="up-card-body" style="padding: 24px 24px 20px">

@@ -3,7 +3,7 @@
     backend -> worker
 '''
 
-from os import environ, path, makedirs
+from os import environ, path, makedirs, chmod, chown
 from uuid import UUID
 from time import sleep
 from docker import from_env
@@ -12,6 +12,7 @@ from json import dumps as jdumps
 from celery import Celery
 from tldextract import extract as textract
 from qbreport import make_report
+from qbmailreport import make_email_report
 from shared.settings import json_settings
 from shared.logger import log_string, setup_task_logger, ignore_exception, cancel_task_logger
 from shared.retention import cleanup_expired_analyses
@@ -245,4 +246,87 @@ def analyze_url(self, parsed):
     except Exception as e:
         log_string("Report error -> {}".format(e), task=parsed['task'])
         outcome, failure = 'failed', 'Report generation failed'
+    cancel_task_logger(parsed['task'], outcome, failure)
+
+
+EMAIL_WORKER = json_settings[environ["project_env"]]["email_worker"]
+EMAIL_INPUTS = ('input.eml', 'input.msg')
+MAILBOX_USER = 65534
+
+
+@CELERY.task(bind=True, name=EMAIL_WORKER["name"], queue=EMAIL_WORKER["queue"], soft_time_limit=EMAIL_WORKER["task_time_limit"], time_limit=EMAIL_WORKER["task_time_limit"] + 10, max_retries=0)
+def analyze_email(self, parsed):
+    # The message is parsed in a throwaway container: no network, read-only root filesystem,
+    # no capabilities, unprivileged user. It only sees its input file and an output folder.
+    if str(UUID(parsed['task'])) != parsed['task'] or not parsed.get('owner_id'):
+        raise ValueError('A canonical task UUID and owner are required')
+    if parsed.get('input_name') not in EMAIL_INPUTS:
+        raise ValueError('Unexpected email input name')
+    if not setup_task_logger(parsed):
+        return
+    log_string("Start email analysis", task=parsed['task'])
+    outcome, failure = 'completed', None
+    container = None
+    task_output = path.join(json_settings[environ['project_env']]['output_folder'], parsed['task'])
+    mail_output = path.join(task_output, 'mail')
+    try:
+        makedirs(mail_output, exist_ok=True)
+        chown(mail_output, MAILBOX_USER, MAILBOX_USER)
+        chmod(mail_output, 0o700)
+        chmod(path.join(task_output, parsed['input_name']), 0o644)
+        output_vol = json_settings[environ["project_env"]].get("docker_volume_output") or json_settings[environ["project_env"]]["output_folder"]
+        if json_settings[environ['project_env']].get('docker_volume_output'):
+            host_output = DOCKER_CLIENT.volumes.get(output_vol).attrs['Mountpoint']
+        else:
+            host_output = output_vol
+        host_task_output = path.join(host_output, parsed['task'])
+        container_name = f"url-sandbox_mailbox_{parsed['task']}"
+        try:
+            DOCKER_CLIENT.containers.get(container_name).remove(force=True)
+        except Exception:
+            pass
+        container = DOCKER_CLIENT.containers.run(
+            "url-sandbox-mailbox",
+            name=container_name,
+            command=[parsed['input_name'], parsed.get('filename') or parsed['input_name']],
+            volumes={path.join(host_task_output, parsed['input_name']): {'bind': '/in/' + parsed['input_name'], 'mode': 'ro'},
+                     path.join(host_task_output, 'mail'): {'bind': '/out', 'mode': 'rw'}},
+            detach=True,
+            network_mode='none',
+            read_only=True,
+            tmpfs={'/tmp': 'size=64m'},
+            cap_drop=['ALL'],
+            security_opt=['no-new-privileges'],
+            mem_limit='512m',
+            pids_limit=64,
+            nano_cpus=1000000000,
+            labels={'url-sandbox.managed': 'true', 'url-sandbox.task': parsed['task']}
+        )
+        try:
+            container.wait(timeout=EMAIL_WORKER['parse_timeout'])
+        except Exception:
+            outcome, failure = 'timed_out', 'Email parsing did not finish in time'
+        logs = container.logs() or b''
+        for item in logs.split(b"\n"):
+            with ignore_exception(Exception):
+                if len(item) > 0:
+                    log_string(item.decode("utf-8", "replace"), task=parsed['task'])
+        if outcome == 'completed' and b'Done!!' not in logs:
+            outcome, failure = 'failed', 'The message could not be parsed'
+    except Exception as e:
+        outcome, failure = 'failed', str(e)
+        log_string("Error -> {}".format(e), task=parsed['task'])
+    finally:
+        if container is not None:
+            try:
+                container.remove(force=True)
+            except Exception:
+                pass
+    if outcome == 'completed':
+        try:
+            analysis = make_email_report(parsed, mail_output)
+            log_string("Email report saved: verdict {}".format(analysis.get('verdict')), task=parsed['task'])
+        except Exception as e:
+            log_string("Report error -> {}".format(e), task=parsed['task'])
+            outcome, failure = 'failed', 'Report generation failed'
     cancel_task_logger(parsed['task'], outcome, failure)

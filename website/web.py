@@ -4,7 +4,7 @@
 '''
 
 import re
-from os import environ, path
+from os import environ, path, makedirs
 from uuid import UUID, uuid4
 from datetime import timedelta, datetime
 from json import dumps, loads
@@ -75,9 +75,15 @@ USERAGENTS = [
     ('Googlebot (Smartphone)', 'Googlebot Crawler (Smartphone)')
 ]
 
+EMAIL_WORKER = json_settings[environ["project_env"]]["email_worker"]
+EMAIL_MAX_BYTES = EMAIL_WORKER["max_upload_bytes"]
+EMAIL_UPLOAD_PATHS = ('/email/', '/api/v1/analyze/email')
+REQUEST_MAX_BYTES = 1024 * 1024
+
 APP = Flask(__name__)
 APP.secret_key = load_session_secret()
-APP.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
+# Only the email uploads may send more than REQUEST_MAX_BYTES (see limit_request_size).
+APP.config['MAX_CONTENT_LENGTH'] = EMAIL_MAX_BYTES + 64 * 1024
 APP.config['MONGODB_SETTINGS'] = json_settings[environ["project_env"]]["web_mongo"]
 APP.config['SESSION_COOKIE_SAMESITE'] = "Lax"
 ANALYZER_TIMEOUT = json_settings[environ["project_env"]]["analyzer_timeout"]
@@ -376,6 +382,10 @@ class CustomViewBufferForm(BaseView):
                     result["interactive_timeout"] = temp_form.interactivetimeout.data
                     result["useragent"] = temp_form.useragents.data
                     result["useragent_mapped"] = SWITCHES_MAPPED[temp_form.useragents.data]
+                    parent = owned_task(request.form.get('parent_task'))
+                    if parent and parent.get('type') == 'email':
+                        # a link opened from an email report is listed back on that report
+                        result["parent_task"] = parent['task']
                     enqueue_owned_task(result)
                     if request.form.get('submitandwait') == 'Analyze & Wait':
                         # open the task's report page; it waits and reloads when the task ends
@@ -400,6 +410,82 @@ class CustomViewBufferForm(BaseView):
         '''
         if not accessible then go to login
         '''
+        return redirect(url_for('admin.login_view', next=request.url))
+
+
+OLE_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+HEADER_LINE = re.compile(rb'^[!-9;-~]+:[ \t]', re.MULTILINE)
+MAIL_HEADERS = re.compile(rb'^(from|subject|date|received|message-id|to|return-path|mime-version):', re.IGNORECASE | re.MULTILINE)
+
+
+def email_input_name(raw):
+    '''input.msg for an Outlook file, input.eml for an RFC 822 message, None for anything else'''
+    if raw.startswith(OLE_MAGIC):
+        return 'input.msg'
+    head = raw[:64 * 1024].lstrip(b'\xef\xbb\xbf\r\n\t ')
+    if head.startswith(b'From '):
+        head = head.split(b'\n', 1)[-1]  # mbox separator line
+    first = head.split(b'\n', 1)[0]
+    if HEADER_LINE.match(first) and MAIL_HEADERS.search(head.split(b'\r\n\r\n', 1)[0].split(b'\n\n', 1)[0]):
+        return 'input.eml'
+    return None
+
+
+def display_filename(name):
+    name = path.basename(str(name or '').replace('\\', '/'))
+    name = ''.join(ch for ch in name if ch.isprintable() and ch not in '\u202e\u202d')
+    return name[:200] or 'message'
+
+
+def queue_email(upload, owner_id):
+    '''store an uploaded .eml/.msg in its task folder and queue it; returns (task id, error)'''
+    if upload is None:
+        return None, 'Choose an .eml or .msg file'
+    raw = upload.read(EMAIL_MAX_BYTES + 1)
+    if not raw:
+        return None, 'The file is empty'
+    if len(raw) > EMAIL_MAX_BYTES:
+        return None, 'The file is larger than {} MB'.format(EMAIL_MAX_BYTES // (1024 * 1024))
+    input_name = email_input_name(raw)
+    if not input_name:
+        return None, 'This is not an .eml or .msg email message'
+    task = str(uuid4())
+    task_dir = path.join(json_settings[environ["project_env"]]["output_folder"], task)
+    makedirs(task_dir, exist_ok=True)
+    with open(path.join(task_dir, input_name), 'wb') as handle:
+        handle.write(raw)
+    filename = display_filename(upload.filename)
+    enqueue_owned_task({'task': task, 'owner_id': owner_id, 'type': 'email', 'buffer': filename,
+                        'filename': filename, 'input_name': input_name, 'size': len(raw)}, 'email_worker')
+    return task, None
+
+
+class CustomViewEmailForm(BaseView):
+    '''
+    upload an email (.eml / .msg) for analysis
+    '''
+    def is_visible(self):
+        return False
+
+    @expose('/', methods=['POST', 'GET'])
+    def index(self):
+        if request.method == 'POST':
+            task, error = queue_email(request.files.get('file'), str(current_user.get_id()))
+            if error:
+                flash(error, 'error')
+                return self.render('upload_email.html', header='New Analysis', max_mb=EMAIL_MAX_BYTES // (1024 * 1024),
+                                   recent=get_queue_tasks(limit=3)), 400
+            if request.form.get('submitandwait'):
+                return redirect('/report/' + task)
+            flash(gettext('Analysis queued'), 'success')
+            return redirect('/queue/')
+        return self.render('upload_email.html', header='New Analysis', max_mb=EMAIL_MAX_BYTES // (1024 * 1024),
+                           recent=get_queue_tasks(limit=3))
+
+    def is_accessible(self):
+        return current_user.is_authenticated
+
+    def inaccessible_callback(self, name, **kwargs):
         return redirect(url_for('admin.login_view', next=request.url))
 
 
@@ -534,22 +620,28 @@ def get_queue_tasks(limit=100):
     with ignore_exception(Exception):
         cursor = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]].find(
             {"owner_id": owner_id}, {'task': 1, 'buffer': 1, 'domain': 1, 'type': 1, 'interactive': 1,
-                                     'start': 1, 'end': 1, 'status': 1, 'has_logs': 1, 'logs': {'$slice': 1}}
+                                     'start': 1, 'end': 1, 'status': 1, 'has_logs': 1, 'logs': {'$slice': 1},
+                                     'subject': 1, 'filename': 1}
         ).sort([("start", -1)]).limit(limit)
         for item in cursor:
             start = item.get("start")
             end = item.get("end")
             logs = item.get("logs") or []
             status = task_status(item)
-            target = item.get("buffer", "") or item.get("domain", "") or "—"
-            host, rest = split_target(target)
+            if item.get("type") == "email":
+                # subject once parsed, the uploaded file name until then
+                target = item.get("subject") or item.get("filename") or "(no subject)"
+                host, rest = target, ""
+            else:
+                target = item.get("buffer", "") or item.get("domain", "") or "—"
+                host, rest = split_target(target)
             tasks.append({
                 "task": item.get("task", ""),
                 "short": item.get("task", "")[:8],
                 "target": target,
                 "host": host,
                 "rest": rest,
-                "type": "File" if item.get("type") == "file" else "URL",
+                "type": {"file": "File", "email": "Email"}.get(item.get("type"), "URL"),
                 "status": status,
                 "status_label": STATUS_LABELS.get(status, status.replace('_', ' ').capitalize()),
                 "vnc": vnc_state(item.get("task", ""), item.get("interactive"), status),
@@ -724,6 +816,9 @@ class CustomReportView(BaseView):
         '''
         render the stored HTML report body inside the themed layout
         '''
+        doc = owned_task(task_id)
+        if doc and doc.get('type') == 'email':
+            return self.render("email_report.html", task_id=task_id, **email_report_context(task_id))
         body = ""
         with ignore_exception(Exception):
             item = get_it_fs(defaultdb["dbname"], {"task": task_id, 'contentType': 'text/html'})
@@ -745,6 +840,159 @@ class CustomReportView(BaseView):
         if isinstance(item, bytes):
             item = item.decode('utf-8', 'ignore')
         return APP.response_class(item, mimetype='application/json')
+
+    @expose('/<task_id>/message')
+    def view_message(self, task_id):
+        '''
+        the email body as rendered by the mailbox container, for the report's sandboxed iframe
+        '''
+        artifact = get_artifact(defaultdb['dbname'], task_id, 'email_message')
+        if not artifact:
+            return jsonify(error='No rendered message for this task'), 404
+        response = Response(artifact[0], mimetype='text/html')
+        # Defence in depth on top of the mailbox sanitizer and the iframe sandbox: nothing in
+        # the message may run or fetch, and only this application may frame it.
+        response.headers['Content-Security-Policy'] = MESSAGE_CSP
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
+
+    @expose('/<task_id>/original')
+    def download_original(self, task_id):
+        '''
+        the uploaded message file, always as a download (never rendered by the browser)
+        '''
+        doc = owned_task(task_id)
+        input_name = doc.get('input_name') if doc else None
+        if input_name not in ('input.eml', 'input.msg'):
+            return jsonify(error='No original message for this task'), 404
+        source = path.join(json_settings[environ["project_env"]]["output_folder"], task_id, input_name)
+        if not path.isfile(source) or path.islink(source):
+            return jsonify(error='The original message is no longer stored'), 404
+        name = display_filename(doc.get('filename'))
+        extension = input_name.rsplit('.', 1)[1]
+        if not name.lower().endswith('.' + extension):
+            name += '.' + extension
+        response = send_file(source, mimetype='application/octet-stream', as_attachment=True, download_name=name)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response
+
+    @expose('/<task_id>/iocs.csv')
+    def download_iocs(self, task_id):
+        '''
+        the indicators of compromise of an email analysis as type,value rows
+        '''
+        analysis = load_email_analysis(task_id)
+        if not analysis:
+            return jsonify(error='No email analysis for this task'), 404
+        import csv
+        from io import StringIO
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['type', 'value'])
+        for kind, values in (analysis.get('iocs') or {}).items():
+            for value in values:
+                # a leading = + - @ would make spreadsheets evaluate the cell
+                text = str(value)
+                writer.writerow([kind, "'" + text if text[:1] in ('=', '+', '-', '@') else text])
+        response = Response(output.getvalue(), mimetype='text/csv')
+        response.headers['Content-Disposition'] = 'attachment; filename="iocs-{}.csv"'.format(task_id[:8])
+        return response
+
+
+MESSAGE_CSP = ("default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; "
+               "script-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'")
+
+SEVERITY_LABELS = {'high': 'High', 'medium': 'Medium', 'low': 'Low', 'info': 'Info'}
+VERDICT_LABELS = {'suspicious': 'Suspicious', 'review': 'Needs review', 'low': 'Low risk', 'clean': 'No findings'}
+LINK_FLAG_LABELS = {
+    'masked': 'masked', 'wrapped': 'gateway-wrapped', 'script_scheme': 'script URL', 'ip_host': 'IP address',
+    'punycode': 'punycode', 'shortener': 'shortener', 'not_https': 'http', 'credentials_in_url': 'user@host',
+    'file_scheme': 'file URL', 'malformed': 'malformed'}
+ATTACHMENT_FLAG_LABELS = {
+    'executable': 'executable', 'macro_enabled': 'macro-enabled', 'contains_macros': 'contains macros',
+    'legacy_office': 'legacy Office', 'html': 'HTML', 'archive': 'archive', 'encrypted_archive': 'encrypted',
+    'double_extension': 'double extension', 'rtlo_filename': 'RTL override', 'type_mismatch': 'type mismatch',
+    'disk_image': 'disk image', 'onenote': 'OneNote'}
+RISKY_FLAGS = {'masked', 'script_scheme', 'ip_host', 'punycode', 'credentials_in_url', 'file_scheme', 'executable',
+               'macro_enabled', 'contains_macros', 'encrypted_archive', 'double_extension', 'rtlo_filename',
+               'type_mismatch', 'disk_image', 'onenote', 'html'}
+
+
+def load_email_analysis(task_id):
+    '''
+    the analysis the mailbox container produced (empty dict while queued or if parsing failed)
+    '''
+    with ignore_exception(Exception):
+        raw = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json"})
+        if raw:
+            return loads(raw.decode('utf-8', 'ignore') if isinstance(raw, bytes) else raw)
+    return {}
+
+
+def email_report_context(task_id):
+    '''
+    everything the email report template needs: run facts, the analysis and child URL analyses
+    '''
+    owner_id = request_owner_id()
+    collection = CLIENT[defaultdb["dbname"]][defaultdb["taskdblogscoll"]]
+    doc = collection.find_one({"task": task_id, "owner_id": owner_id}, {"logs": 0}) or {}
+    status = task_status(doc) if doc else 'completed'
+    start, end = doc.get("start"), doc.get("end")
+    analysis = load_email_analysis(task_id)
+    message = analysis.get('message') or {}
+    children = {}
+    for child in collection.find({"parent_task": task_id, "owner_id": owner_id},
+                                 {"task": 1, "buffer": 1, "status": 1, "end": 1, "has_logs": 1, "logs": {'$slice': 1}}
+                                 ).sort([("start", 1)]):
+        state = task_status(child)
+        children[child.get("buffer", "")] = {"task": child["task"], "status": state,
+                                             "status_label": STATUS_LABELS.get(state, state)}
+    return {
+        "run": {
+            "status": status,
+            "status_label": STATUS_LABELS.get(status, status),
+            "target": message.get('subject') or doc.get('subject') or doc.get('filename') or task_id,
+            "filename": doc.get('filename') or analysis.get('filename') or '',
+            "started": start.strftime('%d %b %Y, %H:%M UTC') if start else '',
+            "duration": _format_duration(start, end) if start else '',
+            "elapsed_seconds": max(0, int(((end or datetime.utcnow()) - start).total_seconds())) if start else 0,
+            "error": doc.get("error") if status in PROBLEM_STATES else '',
+        },
+        "mail": analysis,
+        "children": children,
+        "severity_labels": SEVERITY_LABELS,
+        "verdict_labels": VERDICT_LABELS,
+        "link_flag_labels": LINK_FLAG_LABELS,
+        "attachment_flag_labels": ATTACHMENT_FLAG_LABELS,
+        "risky_flags": RISKY_FLAGS,
+        "url_defaults": {"urltimeout": URL_TIMEOUT, "analyzertimeout": ANALYZER_TIMEOUT},
+    }
+
+
+def email_summary(task_id, analysis):
+    '''
+    compact, SOAR-friendly view of an email analysis
+    '''
+    return {
+        "task_id": task_id,
+        "status": "completed",
+        "type": "email",
+        "verdict": analysis.get("verdict"),
+        "message": analysis.get("message"),
+        "authentication": {key: (analysis.get("authentication") or {}).get(key) for key in ("spf", "dkim", "dmarc")},
+        "indicators": [{key: item.get(key) for key in ("id", "severity", "title", "detail")}
+                       for item in analysis.get("indicators") or []],
+        "links": [{key: item.get(key) for key in ("url", "target", "display", "domain", "flags")}
+                  for item in analysis.get("links") or []],
+        "attachments": [{key: item.get(key) for key in ("filename", "size", "detected", "sha256", "flags")}
+                        for item in analysis.get("attachments") or []],
+        "iocs": analysis.get("iocs") or {},
+        "file": {"filename": analysis.get("filename"), "format": analysis.get("format"),
+                 "sha256": (analysis.get("hashes") or {}).get("sha256")},
+    }
 
 
 class CustomTaskLogView(BaseView):
@@ -1087,26 +1335,36 @@ def owned_task(task_id):
         return g.task_doc
     item = CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']].find_one(
         {'task': task_id, 'owner_id': owner_id},
-        {'task': 1, 'owner_id': 1, 'start': 1, 'end': 1, 'buffer': 1, 'domain': 1,
-         'has_logs': 1, 'status': 1, 'error': 1, 'logs': {'$slice': 1}})
+        {'task': 1, 'owner_id': 1, 'start': 1, 'end': 1, 'buffer': 1, 'domain': 1, 'type': 1,
+         'input_name': 1, 'filename': 1, 'has_logs': 1, 'status': 1, 'error': 1, 'logs': {'$slice': 1}})
     if item:
         g.task_doc = item
     return item
 
 
-def enqueue_owned_task(result):
+def enqueue_owned_task(result, worker='worker'):
     # Persist ownership before dispatch: status/authorization must work while queued.
     tasks = CLIENT[defaultdb['dbname']][defaultdb['taskdblogscoll']]
     tasks.insert_one(dict(result, start=datetime.utcnow(), end=None, logs=[], status='queued'))
     try:
-        return CELERY.send_task(json_settings[environ['project_env']]['worker']['name'],
+        return CELERY.send_task(json_settings[environ['project_env']][worker]['name'],
                                 args=[result], task_id=result['task'],
-                                queue=json_settings[environ['project_env']]['worker']['queue'])
+                                queue=json_settings[environ['project_env']][worker]['queue'])
     except Exception:
         tasks.update_one({'task': result['task'], 'owner_id': result['owner_id']},
                          {'$set': {'dispatch_failed': True, 'status': 'failed',
                                    'end': datetime.utcnow(), 'error': 'Queue dispatch failed'}})
         raise
+
+
+@APP.before_request
+def limit_request_size():
+    if request.path in EMAIL_UPLOAD_PATHS:
+        return None
+    # a chunked body has no length to check up front, and only the uploads need a large one
+    chunked = 'chunked' in request.headers.get('Transfer-Encoding', '').lower()
+    if chunked or (request.content_length or 0) > REQUEST_MAX_BYTES:
+        return jsonify(error='Request too large'), 413
 
 
 @APP.before_request
@@ -1216,6 +1474,25 @@ def api_analyze():
     }), 201
 
 
+@APP.route('/api/v1/analyze/email', methods=['POST'])
+@CSRF.exempt
+def api_analyze_email():
+    '''
+    multipart upload of one .eml or .msg file in the "file" field
+    '''
+    if not check_api_auth():
+        return jsonify(error="Unauthorized. Provide valid X-API-Key or Bearer token."), 401
+    task_id, error = queue_email(request.files.get('file'), request_owner_id())
+    if error:
+        return jsonify(error=error), 400
+    return jsonify({
+        "status": "queued",
+        "task_id": task_id,
+        "type": "email",
+        "created_at": datetime.utcnow().isoformat() + "Z"
+    }), 201
+
+
 @APP.route('/api/v1/tasks/<task_id>', methods=['GET'])
 @CSRF.exempt
 def api_task_status(task_id):
@@ -1267,6 +1544,12 @@ def api_task_summary(task_id):
             "status": "running" if task_doc.get('has_logs') or task_doc.get("logs") else "queued",
             "message": "Analysis is still in progress. Check back shortly."
         }), 202
+
+    if task_doc.get("type") == "email":
+        analysis = load_email_analysis(task_id)
+        if not analysis:
+            return jsonify(error="Analysis output not found for this task."), 404
+        return jsonify(email_summary(task_id, analysis)), 200
 
     import json
     ai_raw = get_it_fs(defaultdb["dbname"], {"task": task_id, "contentType": "application/json; type=ai_summary"})
@@ -1427,6 +1710,7 @@ class CustomMenuLink(MenuLink):
 ADMIN = Admin(APP, "UrlProbe", index_view=CustomAdminIndexView(url='/'), base_template='base.html', template_mode='bootstrap3')
 ADMIN.add_link(CustomMenuLink(name='Logout', category='', url="/logout", icon_type='glyph', icon_value='glyphicon glyphicon-log-out'))
 ADMIN.add_view(CustomViewBufferForm(name="New Analysis", endpoint='url', menu_icon_type='glyph', menu_icon_value='glyphicon-plus'))
+ADMIN.add_view(CustomViewEmailForm(name="New Email Analysis", endpoint='email', menu_icon_type='glyph', menu_icon_value='glyphicon-envelope'))
 ADMIN.add_view(CustomQueueView(name="Task Queue", endpoint='queue', menu_icon_type='glyph', menu_icon_value='glyphicon-tasks', category='Monitor'))
 ADMIN.add_view(CustomLogsView(name="Active Logs", endpoint='activelogs', menu_icon_type='glyph', menu_icon_value='glyphicon-flash', category='Monitor'))
 ADMIN.add_view(ApiKeysView(name='API Keys', endpoint='apikeys', menu_icon_type='glyph', menu_icon_value='glyphicon-lock', category='Account'))

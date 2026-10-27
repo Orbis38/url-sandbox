@@ -17,12 +17,13 @@ UrlProbe spins up ephemeral browser sandboxes equipped with anti-bot evasion tec
 3. [System Architecture](#system-architecture)
 4. [Analysis Execution Lifecycle](#analysis-execution-lifecycle)
 5. [Interactive VNC Architecture & Concurrency](#interactive-vnc-architecture--concurrency)
-6. [Data Persistence & Retention Policy](#data-persistence--retention-policy)
-7. [REST API Documentation](#rest-api-documentation)
-8. [Installation & Deployment](#installation--deployment)
-9. [Operational Commands](#operational-commands)
-10. [Security & Production Hardening](#security--production-hardening)
-11. [License](#license)
+6. [Email Analysis (.eml / .msg)](#email-analysis-eml--msg)
+7. [Data Persistence & Retention Policy](#data-persistence--retention-policy)
+8. [REST API Documentation](#rest-api-documentation)
+9. [Installation & Deployment](#installation--deployment)
+10. [Operational Commands](#operational-commands)
+11. [Security & Production Hardening](#security--production-hardening)
+12. [License](#license)
 
 ---
 
@@ -36,6 +37,7 @@ UrlProbe spins up ephemeral browser sandboxes equipped with anti-bot evasion tec
 - **🤖 Multimodal AI Vision Heuristics**: Extracts visual features, detects credential harvesting fields, analyzes DOM brand impersonation heuristics, and produces an AI-ready summary optimized for local LLMs (Gemma, Llama, Ollama).
 - **🍪 Intelligent Cookie Consent Suppression**: Automatically identifies and dismisses intrusive GDPR/cookie consent dialogs before screenshots and threat heuristics are calculated.
 - **💾 Long-Term Persistence & 60-Day Auto-Pruning**: User accounts persist indefinitely in MongoDB Docker named volumes. Analysis records, GridFS documents, logs, and artifacts are automatically purged after 60 days.
+- **✉️ Email Analysis (.eml / .msg)**: Upload a suspicious message and read it exactly as the recipient saw it, rendered inert (no scripts, no remote content, no form submission). Headers, SPF/DKIM/DMARC, relay hops, masked and gateway-wrapped links, risky attachments and IOCs are extracted in a network-less container; any link opens in the URL sandbox with one click.
 - **⚡ Programmatic REST API**: Fully authenticated endpoints (`/api/v1/analyze`, `/api/v1/tasks/<id>`, `/api/v1/tasks/<id>/summary`, `/api/v1/tasks/<id>/screenshot`, `/api/v1/tasks/<id>/video`) for turnkey integration with SOAR platforms (Cortex XSOAR, Splunk SOAR, Shuffle).
 
 ---
@@ -184,6 +186,21 @@ UrlProbe provides an isolated, multi-tenant interactive architecture designed to
 
 ---
 
+## Email Analysis (.eml / .msg)
+
+Choose **New Analysis → Email** and upload an `.eml` (RFC 822) or Outlook `.msg` file (up to 25 MB). The worker starts a disposable `url-sandbox-mailbox` container for each message:
+
+- **no network** (`network_mode: none`), read-only root filesystem, all capabilities dropped, `no-new-privileges`, unprivileged user, memory/PID/CPU limits;
+- it sees only its input file (read-only) and an empty output folder, and is removed as soon as parsing ends.
+
+The report opens on the **Message** tab, which shows the email like a mail client does: sender (display name and real address), recipients, Reply-To, date, attachments and the HTML body with its original layout. The body is an inert copy served with `Content-Security-Policy: default-src 'none'` inside an `<iframe sandbox>` without scripts: scripts, frames, form actions, event handlers and every remote URL are removed by the parser, inline `cid:` images are embedded, and remote images/styles/tracking pixels are blocked (a banner lists their hosts). Clicking a link never navigates: an inspector shows the displayed text, the real destination (Safe Links / URL Defense / Google redirects unwrapped), its flags, and buttons to analyze it in the URL sandbox (optionally as a live VNC session). Those analyses are listed back on the email report.
+
+The other tabs cover authentication results (SPF/DKIM/DMARC), the relay path with public IPs and per-hop delays, all raw headers, every link with its flags, attachments with MD5/SHA-1/SHA-256, the type detected from content and flags (executable, macros, HTML, disk image, archive/encrypted archive, double extension, RTL override, type mismatch), and the plain-text/HTML source and MIME structure. The side rail summarizes the verdict and indicators; IOCs export as CSV or JSON, and the original file can be downloaded.
+
+Attachments are hashed and typed but never opened or executed. Office macros and Windows executables need a Windows detonation environment, which is outside the scope of this container.
+
+---
+
 ## Data Persistence & Retention Policy
 
 UrlProbe separates ephemeral execution from durable storage:
@@ -318,6 +335,12 @@ GET /live_interact/<task_id>/status
   "video_url": "/api/v1/tasks/4b68ff03-3e11-46ab-a021-998847b744d0/video"
 }
 ```
+
+### 6. Submit an Email for Analysis
+```bash
+curl -H "X-API-Key: $KEY" -F "file=@suspicious.eml" https://urlprobe.local/api/v1/analyze/email
+```
+Multipart upload of one `.eml` or `.msg` file in the `file` field. Returns `201` with `task_id`. Poll `GET /api/v1/tasks/<task_id>` as for URLs; `GET /api/v1/tasks/<task_id>/summary` then returns the verdict, sender, SPF/DKIM/DMARC results, indicators, links, attachment hashes and IOCs.
 
 ---
 
