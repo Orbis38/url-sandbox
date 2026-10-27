@@ -584,6 +584,11 @@ button.custom-close { -webkit-appearance: none; padding: 0 4px; background: none
     .up-tab { flex: 0 0 auto; }
 }
 
+/* live-session widget stored in reports built before the fix: once the session has ended,
+   drop the 720px black frame that only the live view needs */
+.up-vnc-frame-container:has(.up-session-ended-box) { height: auto !important; background: transparent !important; }
+.up-session-ended-box { min-height: 0 !important; padding: 40px 20px !important; }
+
 /* legacy report sections (built by backend/qbreport.py) shown as cards */
 .tablewrapper { background: var(--up-bg-card); border: 1px solid var(--up-border); border-radius: 14px; overflow: hidden; }
 .tablewrapper table { width: 100%; border-collapse: collapse; margin: 0; }

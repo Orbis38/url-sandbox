@@ -346,7 +346,7 @@ def make_report(parsed):
                 flex-wrap: wrap;
                 gap: 10px;
             }}
-            .up-live-badge {{
+            .up-iw-live-badge {{
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;
@@ -354,15 +354,15 @@ def make_report(parsed):
                 font-weight: 600;
                 font-size: 13px;
             }}
-            .up-live-dot {{
+            .up-iw-live-dot {{
                 width: 10px;
                 height: 10px;
                 border-radius: 50%;
                 background: #22c55e;
                 box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.3);
-                animation: up-pulse 2s infinite;
+                animation: up-iw-pulse 2s infinite;
             }}
-            @keyframes up-pulse {{
+            @keyframes up-iw-pulse {{
                 0% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }}
                 70% {{ box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }}
                 100% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }}
@@ -372,7 +372,7 @@ def make_report(parsed):
                 align-items: center;
                 gap: 8px;
             }}
-            .up-btn-primary, .up-btn-secondary, .up-btn-danger {{
+            .up-iw-btn-primary, .up-iw-btn-secondary, .up-iw-btn-danger {{
                 display: inline-flex;
                 align-items: center;
                 gap: 5px;
@@ -386,12 +386,12 @@ def make_report(parsed):
                 transition: all .15s ease-in-out;
                 text-decoration: none;
             }}
-            .up-btn-primary {{ background: #6366f1; color: #fff; }}
-            .up-btn-primary:hover {{ background: #4f46e5; }}
-            .up-btn-secondary {{ background: #334155; color: #cbd5e1; }}
-            .up-btn-secondary:hover {{ background: #475569; color: #fff; }}
-            .up-btn-danger {{ background: #ef4444; color: #fff; }}
-            .up-btn-danger:hover {{ background: #dc2626; }}
+            .up-iw-btn-primary {{ background: #6366f1; color: #fff; }}
+            .up-iw-btn-primary:hover {{ background: #4f46e5; }}
+            .up-iw-btn-secondary {{ background: #334155; color: #cbd5e1; }}
+            .up-iw-btn-secondary:hover {{ background: #475569; color: #fff; }}
+            .up-iw-btn-danger {{ background: #ef4444; color: #fff; }}
+            .up-iw-btn-danger:hover {{ background: #dc2626; }}
             .up-vnc-frame-container {{
                 position: relative;
                 width: 100%;
@@ -409,7 +409,7 @@ def make_report(parsed):
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                min-height: 420px;
+                min-height: 0;
                 background: #090d16;
                 color: #94a3b8;
                 text-align: center;
@@ -432,17 +432,17 @@ def make_report(parsed):
 
         <div class="up-interactive-widget" id="interactive-widget">
             <div class="up-interactive-header">
-                <div class="up-live-badge">
-                    <span class="up-live-dot" id="live-indicator-dot"></span>
+                <div class="up-iw-live-badge">
+                    <span class="up-iw-live-dot" id="live-indicator-dot"></span>
                     <span id="live-status-title">Live Interactive Browser (30 FPS &bull; 1280&times;720)</span>
                     <span id="live-session-info" style="color: #94a3b8; font-weight: normal; font-size: 12px; margin-left: 6px;">
                         Direct navigation: scroll, click, and type in real time
                     </span>
                 </div>
                 <div class="up-interactive-actions" id="interactive-actions">
-                    <button type="button" class="up-btn-secondary" id="btn-fullscreen" onclick="toggleVncFullscreen()">⛶ Fullscreen</button>
-                    <a href="#" target="_blank" class="up-btn-secondary" id="btn-newtab">⎘ Open in New Tab</a>
-                    <button type="button" class="up-btn-danger" id="btn-finish" onclick="finishLiveSession()">✓ Finish Session</button>
+                    <button type="button" class="up-iw-btn-secondary" id="btn-fullscreen" onclick="toggleVncFullscreen()">⛶ Fullscreen</button>
+                    <a href="#" target="_blank" class="up-iw-btn-secondary" id="btn-newtab">⎘ Open in New Tab</a>
+                    <button type="button" class="up-iw-btn-danger" id="btn-finish" onclick="finishLiveSession()">✓ Finish Session</button>
                 </div>
             </div>
             <div class="up-vnc-frame-container" id="vnc-container">
@@ -477,7 +477,7 @@ def make_report(parsed):
                         videoBlock = '<div style="margin-top:24px;width:100%;max-width:800px;text-align:left;">' +
                             '<div style="font-weight:600;color:#f1f5f9;margin-bottom:8px;font-size:14px;display:flex;align-items:center;justify-content:space-between;">' +
                                 '<span>🎥 Video Registrazione Sessione VNC</span>' +
-                                '<a href="' + vUrl + '" download="' + TASK + '_session.mp4" class="up-btn-secondary" style="font-size:11px;padding:3px 8px;">⬇ Scarica MP4</a>' +
+                                '<a href="' + vUrl + '" download="' + TASK + '_session.mp4" class="up-iw-btn-secondary" style="font-size:11px;padding:3px 8px;">⬇ Scarica MP4</a>' +
                             '</div>' +
                             '<video controls style="width:100%;border-radius:8px;background:#000;border:1px solid #334155;max-height:480px;" preload="metadata">' +
                                 '<source src="' + vUrl + '" type="video/mp4">' +
@@ -488,6 +488,9 @@ def make_report(parsed):
 
                     var container = document.getElementById('vnc-container');
                     if (container) {{
+                        // the 720px frame was for the live view; the summary only needs its own height
+                        container.style.height = 'auto';
+                        container.style.background = 'transparent';
                         container.innerHTML =
                             '<div class="up-session-ended-box">' +
                                 '<div class="up-session-ended-icon">✓</div>' +
@@ -581,6 +584,8 @@ def make_report(parsed):
 
                     var container = document.getElementById('vnc-container');
                     if (container) {{
+                        container.style.height = 'auto';
+                        container.style.background = 'transparent';
                         container.innerHTML =
                             '<div class="up-session-ended-box">' +
                                 '<div class="up-session-ended-icon" style="border-color:#f59e0b;color:#f59e0b;">⏳</div>' +
