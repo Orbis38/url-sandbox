@@ -14,6 +14,7 @@ from assessment_helpers import ROOT
 def test_worker_mounts_only_task_directory_and_preserves_settings(env):
     from shared.logger import setup_task_logger, cancel_task_logger, log_string, ignore_exception
     from shared.security import validate_timeouts
+    from shared.reachability import failure_message
     web, db, alice, _, _ = env
     launched = []
     def missing(*args): raise KeyError('not found')
@@ -34,7 +35,8 @@ def test_worker_mounts_only_task_directory_and_preserves_settings(env):
         json_settings=web.json_settings, environ={'project_env': 'docker'}, path=os.path,
         makedirs=os.makedirs, UUID=UUID, textract=lambda _: SimpleNamespace(domain='example', suffix='com'),
         hexlify=hexlify, jdumps=json.dumps, make_report=lambda p: None,
-        release_vnc_port=lambda p: None, sleep=lambda s: None, validate_timeouts=validate_timeouts)
+        release_vnc_port=lambda p: None, sleep=lambda s: None, validate_timeouts=validate_timeouts,
+        failure_message=failure_message)
     source = ast.parse((ROOT / 'backend/worker.py').read_text())
     node = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == 'analyze_url')
     node.decorator_list = []
@@ -78,3 +80,46 @@ def test_box_output_and_report_use_same_per_task_directory(env, tmp_path, monkey
     html = web.get_it_fs('urlsandbox', {'task': task, 'contentType': 'text/html'})
     assert b'&lt;script&gt;' in html
     assert b'<script>alert(1)</script>' not in html
+
+
+import pytest
+
+
+@pytest.mark.parametrize('interactive', [False, True])
+def test_unreachable_page_fails_the_task_even_when_interactive(env, tmp_path, interactive):
+    from shared.logger import setup_task_logger, cancel_task_logger, log_string, ignore_exception
+    from shared.security import validate_timeouts
+    from shared.reachability import failure_message
+    web, db, alice, _, _ = env
+    task = str(uuid4())
+    (tmp_path / task).mkdir()
+    (tmp_path / task / 'analysis.done').write_text('')  # interactive: initial analysis finished
+    class Container:
+        status = 'running' if interactive else 'exited'
+        def reload(self): pass
+        def logs(self): return b'Done!!'
+        def stop(self): pass
+        def remove(self): pass
+    docker = SimpleNamespace(
+        containers=SimpleNamespace(get=lambda *a: (_ for _ in ()).throw(KeyError('none')), run=lambda *a, **kw: Container()),
+        volumes=SimpleNamespace(get=lambda name: SimpleNamespace(attrs={'Mountpoint': str(tmp_path)})))
+    unreachable = {'reachable': False, 'via_tor': True, 'tor_ok': True, 'page_loaded': False,
+                   'reason': 'the site did not answer in time'}
+    namespace = dict(setup_task_logger=setup_task_logger, cancel_task_logger=cancel_task_logger,
+        log_string=log_string, ignore_exception=ignore_exception, DOCKER_CLIENT=docker,
+        json_settings=web.json_settings, environ={'project_env': 'docker'}, path=os.path,
+        makedirs=os.makedirs, UUID=UUID, textract=lambda _: SimpleNamespace(domain='pippo', suffix='com'),
+        hexlify=hexlify, jdumps=json.dumps, make_report=lambda p: unreachable, find_free_port=lambda *a: 6080,
+        release_vnc_port=lambda p: None, sleep=lambda s: None, validate_timeouts=validate_timeouts,
+        failure_message=failure_message)
+    source = ast.parse((ROOT / 'backend/worker.py').read_text())
+    node = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == 'analyze_url')
+    node.decorator_list = []
+    exec(compile(ast.Module(body=[node], type_ignores=[]), 'worker', 'exec'), namespace)
+    db.taskdblogs.insert_one({'task': task, 'owner_id': str(alice.id), 'status': 'queued',
+                              'start': datetime.utcnow(), 'end': None, 'logs': []})
+    namespace['analyze_url'](None, {'task': task, 'owner_id': str(alice.id), 'buffer': 'https://pippo.com',
+        'interactive': interactive, 'use_proxy': True, 'analyzer_timeout': 30})
+    doc = db.taskdblogs.find_one({'task': task})
+    assert doc['status'] == 'failed'
+    assert doc['error'].startswith('The site did not respond through Tor')

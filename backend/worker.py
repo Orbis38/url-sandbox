@@ -236,10 +236,10 @@ def analyze_url(self, parsed):
     parsed['locations']['box_output'] = json_settings[environ["project_env"]]["output_folder"]
     try:
         reachability = make_report(parsed)
-        # A page that never loaded is a failed analysis, not an empty "completed" one.
-        # Interactive sessions stay usable, so they keep their outcome and only show the notice.
+        # A page that never loaded is a failed analysis, not an empty "completed" one. This holds
+        # for interactive runs too: their live session stays reachable from the report regardless.
         unreachable = failure_message(reachability)
-        if unreachable and outcome == 'completed' and not parsed.get('interactive'):
+        if unreachable and outcome == 'completed':
             outcome, failure = 'failed', unreachable
             log_string(unreachable, task=parsed['task'])
     except Exception as e:
