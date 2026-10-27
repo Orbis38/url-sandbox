@@ -5,3 +5,12 @@ websockify
 websocket-client
 tinydb
 tldextract
+oletools
+pypdf
+pyzipper
+yara-python
+LnkParse3
+pefile
+Pillow
+pyzbar
+qrcode

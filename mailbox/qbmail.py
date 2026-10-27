@@ -394,7 +394,7 @@ class LinkTable:
         self.items = []
         self.index = {}
 
-    def add(self, url, display='', source='html'):
+    def add(self, url, display='', source='html', origin=''):
         url = (url or '').strip()
         if not url or url.startswith('#') or url.lower().startswith(('cid:', 'mailto:', 'tel:')):
             return None
@@ -411,7 +411,8 @@ class LinkTable:
         if target != url:
             flags.append('wrapped')
         self.items.append({'id': len(self.items), 'url': url, 'target': target, 'display': display[:300],
-                           'host': host, 'domain': registered_domain(host), 'flags': flags, 'sources': [source]})
+                           'host': host, 'domain': registered_domain(host), 'flags': flags, 'sources': [source],
+                           'origin': origin[:300]})
         self.index[key] = len(self.items) - 1
         return self.index[key]
 
@@ -440,7 +441,7 @@ def _remote_host(value):
         return ''
 
 
-def render_html(html, links, cid_map):
+def render_html(html, links, cid_map, link_source='html', origin=''):
     '''inert copy of the HTML body: same markup and CSS, nothing that runs or fetches'''
     soup = BeautifulSoup(html, 'html.parser')
     remote = []
@@ -467,7 +468,7 @@ def render_html(html, links, cid_map):
                 tag.attrs[attribute] = _css_scrub(value, remote)
             elif lower in ('href', 'xlink:href') and name in ('a', 'area'):
                 del tag.attrs[attribute]
-                link_id = links.add(value, clean_space(tag.get_text()), 'html')
+                link_id = links.add(value, clean_space(tag.get_text()), link_source, origin)
                 tag.attrs['href'] = '#'
                 if link_id is not None:
                     tag.attrs['data-up-link'] = str(link_id)
@@ -656,11 +657,31 @@ INDICATORS = {
     'double_extension': ('high', 'Double extension', 'An attachment name hides its real type behind a second extension.'),
     'rtlo_filename': ('high', 'Right-to-left override in filename', 'The attachment name uses U+202E to disguise its extension.'),
     'type_mismatch': ('medium', 'Attachment type mismatch', 'An attachment content does not match its extension.'),
+    # found inside attachments (mailbox/attachments.py)
+    'macro_autoexec': ('high', 'Macro runs on open', 'A VBA macro starts by itself when the document is opened.'),
+    'macro_suspicious': ('high', 'Malicious-looking macro', 'The macro runs on open and writes files or executes commands.'),
+    'vba_stomping': ('high', 'VBA stomping', 'The macro source was removed: only compiled code remains, hiding it from scanners.'),
+    'remote_template': ('high', 'Remote template or object', 'The document loads a template or object from the network when opened.'),
+    'dde_field': ('high', 'DDE command', 'The document runs a command through a DDE field, without macros.'),
+    'equation_editor': ('high', 'Equation Editor object', 'An embedded Equation Editor object, used by the CVE-2017-11882 exploit.'),
+    'encrypted_document': ('medium', 'Encrypted document', 'An encrypted Office document hides its content from scanners.'),
+    'pdf_javascript': ('high', 'PDF with JavaScript', 'The PDF contains JavaScript.'),
+    'pdf_launch': ('high', 'PDF launch action', 'The PDF can start a program.'),
+    'pdf_embedded_file': ('high', 'File inside a PDF', 'The PDF carries an embedded file.'),
+    'archive_password_in_body': ('high', 'Archive password in the message', 'The archive opens with a password written in the email, a classic evasion trick.'),
+    'archive_bomb': ('high', 'Decompression bomb', 'An archive expands to an excessive size or number of files.'),
+    'lnk_command': ('high', 'Shortcut runs a command', 'A .lnk file launches PowerShell, mshta or another system tool.'),
+    'script_command': ('high', 'Script launches system tools', 'A script attachment runs PowerShell, cmd, mshta or similar.'),
+    'html_smuggling': ('high', 'HTML smuggling', 'An HTML attachment rebuilds a file inside the browser to bypass filters.'),
+    'local_phishing_page': ('high', 'Local phishing page', 'An HTML attachment asks for a password or sends data to a collection endpoint.'),
+    'svg_script': ('high', 'Script inside an SVG', 'An SVG image contains script or event handlers.'),
+    'qr_code_url': ('medium', 'QR code with a link', 'A QR code leads to a URL (quishing): the victim opens it on a phone, outside corporate filters.'),
+    'yara_match': ('high', 'YARA rule match', 'A YARA rule matched the message or an attachment.'),
 }
 SEVERITY_ORDER = {'high': 3, 'medium': 2, 'low': 1, 'info': 0}
 
 
-def indicators(result, auth, links, attachments, remote, forms):
+def indicators(result, auth, links, attachments, remote, forms, inner=()):
     found = []
 
     def add(key, detail=''):
@@ -719,6 +740,18 @@ def indicators(result, auth, links, attachments, remote, forms):
              if {'macro_enabled', 'contains_macros', 'legacy_office'} & set(item['flags'])]
     if macro:
         add('macro_attachment', ', '.join(macro[:5]))
+    present = {item['id'] for item in found}
+    details = {}
+    for key, detail in inner:
+        if key in INDICATORS:
+            details.setdefault(key, [])
+            detail = ' '.join(str(detail).split())
+            detail = detail if len(detail) <= 160 else detail[:157] + '…'
+            if detail and detail not in details[key]:
+                details[key].append(detail)
+    for key, values in details.items():
+        if key not in present:
+            add(key, '; '.join(values[:4]) + (' (+{})'.format(len(values) - 4) if len(values) > 4 else ''))
     found.sort(key=lambda item: -SEVERITY_ORDER[item['severity']])
     return found
 
@@ -731,8 +764,24 @@ def verdict(found):
 # ---------------------------------------------------------------- entry point
 
 
-def analyze(raw, filename, path=None):
-    '''raw bytes of the uploaded file -> (analysis dict, rendered message HTML)'''
+def collect_hashes(analysis):
+    found = []
+    for child in (analysis or {}).get('children') or []:
+        found.append(child['sha256'])
+        found += collect_hashes(child.get('analysis'))
+    return found
+
+
+def analyze(raw, filename, path=None, extras=None, rules=None):
+    '''
+    raw bytes of the uploaded file -> (analysis dict, rendered message HTML). When given, extras
+    receives the attachment bytes ("samples": sha256 -> (name, data)) and the inert renderings of
+    HTML attachments ("rendered": sha256 -> html); rules are compiled YARA rules.
+    '''
+    import attachments as inspector
+    extras = extras if extras is not None else {}
+    extras.setdefault('samples', {})
+    extras.setdefault('rendered', {})
     kind = 'msg' if raw.startswith(OLE_MAGIC) else 'eml'
     parsed = parse_msg(path) if kind == 'msg' else parse_eml(raw)
     get = parsed['get']
@@ -764,6 +813,29 @@ def analyze(raw, filename, path=None):
     else:
         rendered = document('', '<body><p style="color:#6b7280">This message has no text or HTML body.</p></body>')
 
+    # look inside every attachment; what is found there (URLs, indicators) joins the message's
+    body_text = text or (BeautifulSoup(html, 'html.parser').get_text(' ') if html else '')
+    context = inspector.Context(passwords=inspector.passwords_in(parsed['subject'] + '\n' + body_text), rules=rules,
+                                rendered=extras['rendered'], samples=extras['samples'],
+                                render=lambda markup, where: render_html(markup, links, {}, 'attachment', where)[0])
+    inner, child_hashes = [], []
+    for record, item in zip(attachments, parsed['attachments']):
+        if not item['data']:
+            continue
+        label = record['filename'] or ('inline image cid:' + record['content_id'] if record['content_id'] else 'attachment')
+        context.samples.setdefault(record['sha256'], (record['filename'] or 'attachment', item['data']))
+        context.admit(len(item['data']))
+        found_inside = inspector.inspect(item['data'], label, record['detected'], context)
+        record['analysis'] = found_inside.as_dict()
+        inner += found_inside.indicators
+        known = {(link['target'], link['origin']) for link in links.items}
+        for url, where in found_inside.urls:
+            if (unwrap_url(url), where) not in known:
+                links.add(url, '', 'qr' if 'QR code' in where else 'attachment', where)
+        child_hashes += collect_hashes(record['analysis'])
+    for match in inspector.yara_matches(rules, raw):
+        inner.append(('yara_match', '{} (message)'.format(match['rule'])))
+
     result = {
         'subject': parsed['subject'],
         'from': mailbox(parsed['from']),
@@ -775,7 +847,7 @@ def analyze(raw, filename, path=None):
     }
     auth = parse_authentication(get)
     hops = parse_received(get('Received'))
-    found = indicators(result, auth, links.items, attachments, remote, forms)
+    found = indicators(result, auth, links.items, attachments, remote, forms, inner)
 
     emails = [result['from']['address'], result['return_path']['address']] + \
         [item['address'] for item in result['reply_to']] + ([result['sender']['address']] if result['sender'] else [])
@@ -813,7 +885,8 @@ def analyze(raw, filename, path=None):
                                           if link['domain'] and 'ip_host' not in link['flags'])),
             'ips': list(dict.fromkeys(ips)),
             'emails': list(dict.fromkeys(e for e in emails if e)),
-            'sha256': list(dict.fromkeys(item['sha256'] for item in attachments if item['size'])),
+            'sha256': list(dict.fromkeys([item['sha256'] for item in attachments if item['size']] + child_hashes)),
         },
+        'inspection_notes': context.notes,
     }
     return analysis, rendered

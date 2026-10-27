@@ -1,3 +1,11 @@
 beautifulsoup4==4.15.0
 tldextract==5.4.0
 extract-msg==0.57.0
+oletools==0.60.2
+pypdf==6.21.3
+LnkParse3==1.6.0
+pefile==2024.8.26
+pyzbar==0.1.9
+Pillow==13.0.0
+yara-python==4.5.4
+pyzipper==0.4.0

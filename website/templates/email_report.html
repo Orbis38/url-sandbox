@@ -13,6 +13,103 @@
    <span class="up-auth-value">{{ value or 'not reported' }}</span>
 </div>
 {%- endmacro %}
+{% macro attachment_card(a, depth) -%}
+{% set an = a.analysis or {} %}
+{% set risky = (a.flags or [])|select('in', risky_flags)|list %}
+{% set bad = an.findings|default([])|selectattr('severity', 'equalto', 'high')|list %}
+<article class="up-attach-card{% if risky or bad %} is-risky{% endif %}{% if depth %} is-child{% endif %}">
+   <header class="up-attach-head">
+      <div class="up-attach-title">
+         <strong class="up-wrap">{{ a.filename or '(unnamed)' }}</strong>
+         <span class="up-mail-sub">{{ a.detected_label }} · {{ a.size|filesizeformat }}{% if a.content_type %} · <span class="up-mono">{{ a.content_type }}</span>{% endif %}{% if a.via %} · {{ a.via }}{% endif %}</span>
+         {% if a.inline %}<span class="up-mail-sub">inline{% if a.content_id %} · cid:{{ a.content_id }}{% endif %}</span>{% endif %}
+         {% if a.embedded_message %}<span class="up-mail-sub">attached message: {{ a.embedded_message }}</span>{% endif %}
+         <div>{% for flag in a.flags %}<span class="up-flag{% if flag in risky_flags %} is-bad{% endif %}">{{ attachment_flag_labels.get(flag, flag) }}</span>{% endfor %}</div>
+      </div>
+      <div class="up-attach-actions">
+         {% if an.rendered %}<button type="button" class="up-btn up-btn-secondary up-btn-sm" data-render="{{ a.sha256 }}">View rendered</button>{% endif %}
+         {% if a.sha256 in (mail.samples or []) %}<a class="up-btn up-btn-ghost up-btn-sm" href="/report/{{ task_id }}/samples/{{ a.sha256 }}.zip" title="ZIP encrypted with the password: infected">Download (zip)</a>{% endif %}
+      </div>
+   </header>
+   <div class="up-attach-hashes up-mono">
+      <span class="up-hash"><span>SHA256</span> {{ a.sha256 }} <button type="button" class="up-icon-btn" data-copy="{{ a.sha256 }}" aria-label="Copy SHA-256" title="Copy SHA-256"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button></span>
+      <span class="up-hash"><span>SHA1</span> {{ a.sha1 }}</span>
+      <span class="up-hash"><span>MD5</span> {{ a.md5 }}</span>
+      {% if an.pe and an.pe.imphash %}<span class="up-hash"><span>IMPHASH</span> {{ an.pe.imphash }}</span>{% endif %}
+   </div>
+   {% if an.findings %}
+   <ul class="up-findings">
+      {% for f in an.findings %}
+      <li class="is-{{ f.severity }}"><span class="up-finding-tool">{{ f.tool }}</span><div><strong>{{ f.title }}</strong>{% if f.detail %}<pre>{{ f.detail }}</pre>{% endif %}</div></li>
+      {% endfor %}
+   </ul>
+   {% endif %}
+   {% if an.preview and an.preview.startswith('data:image/png;base64,') %}
+   <figure class="up-attach-preview"><img src="{{ an.preview }}" alt="First page of {{ a.filename }}" loading="lazy"><figcaption>First page, rendered offline</figcaption></figure>
+   {% endif %}
+   {% if an.lnk %}
+   <dl class="up-attach-facts">
+      <dt>Target</dt><dd class="up-mono">{{ an.lnk.target or '—' }}</dd>
+      <dt>Arguments</dt><dd class="up-mono">{{ an.lnk.arguments or '—' }}</dd>
+      {% if an.lnk.working_directory %}<dt>Working dir</dt><dd class="up-mono">{{ an.lnk.working_directory }}</dd>{% endif %}
+      {% if an.lnk.icon %}<dt>Icon</dt><dd class="up-mono">{{ an.lnk.icon }}</dd>{% endif %}
+      {% for text in an.lnk.decoded %}<dt>Decoded</dt><dd><pre class="up-code">{{ text }}</pre></dd>{% endfor %}
+   </dl>
+   {% endif %}
+   {% if an.pe %}
+   <dl class="up-attach-facts">
+      <dt>Compiled</dt><dd>{{ an.pe.compiled }}</dd>
+      <dt>Signature</dt><dd>{{ 'present (not verified)' if an.pe.signed else 'none' }}</dd>
+      <dt>Sections</dt><dd class="up-mono">{% for sec in an.pe.sections %}{{ sec.name }} ({{ sec.entropy }}){% if not loop.last %}, {% endif %}{% endfor %}</dd>
+      {% if an.pe.suspicious_imports %}<dt>Imports</dt><dd class="up-mono">{{ an.pe.suspicious_imports|join(', ') }}</dd>{% endif %}
+   </dl>
+   {% endif %}
+   {% if an.archive and an.archive.entries %}
+   <details class="up-attach-more">
+      <summary>Archive content ({{ an.archive.entries|length }} file{{ 's' if an.archive.entries|length != 1 }}{% if an.archive.encrypted %}, encrypted{% endif %})</summary>
+      <ul class="up-mono">{% for e in an.archive.entries %}<li>{{ e.name }} <span>{{ e.size|filesizeformat }}</span></li>{% endfor %}</ul>
+   </details>
+   {% endif %}
+   {% if an.macros %}
+   <details class="up-attach-more" open>
+      <summary>VBA macros ({{ an.macros|length }} module{{ 's' if an.macros|length != 1 }})</summary>
+      {% if an.macro_keywords %}
+      <div class="up-table-scroll"><table class="up-table up-mail-table up-keywords">
+         <thead><tr><th>Type</th><th>Keyword</th><th>Meaning</th></tr></thead>
+         <tbody>{% for k in an.macro_keywords %}<tr class="kw-{{ k.type|lower|replace(' ', '-') }}"><td>{{ k.type }}</td><td class="up-mono up-wrap">{{ k.keyword }}</td><td class="up-wrap">{{ k.description }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% endif %}
+      {% for m in an.macros %}
+      <div class="up-macro"><div class="up-macro-name up-mono">{{ m.module }} <span>{{ m.stream }}</span></div><pre class="up-code">{{ m.code }}{% if m.truncated %}
+
+[truncated]{% endif %}</pre></div>
+      {% endfor %}
+   </details>
+   {% endif %}
+   {% if an.qr %}
+   <ul class="up-attach-list">{% for q in an.qr %}<li><span class="up-flag is-warn">QR</span> <span class="up-mono up-wrap">{{ q.text }}</span></li>{% endfor %}</ul>
+   {% endif %}
+   {% if an.yara %}
+   <ul class="up-attach-list">{% for y in an.yara %}<li><span class="up-flag is-bad">YARA</span> <strong class="up-mono">{{ y.rule }}</strong>{% if y.description %} — {{ y.description }}{% endif %}</li>{% endfor %}</ul>
+   {% endif %}
+   {% if an.urls %}
+   <details class="up-attach-more">
+      <summary>{{ an.urls|length }} URL{{ 's' if an.urls|length != 1 }} found inside (also in the Links tab)</summary>
+      <ul class="up-mono">{% for u in an.urls %}<li class="up-wrap">{{ u.url }} <span>{{ u.where }}</span></li>{% endfor %}</ul>
+   </details>
+   {% endif %}
+   {% if an.rendered %}
+   <div class="up-attach-render" data-render-box="{{ a.sha256 }}" hidden>
+      <iframe class="up-inert-frame" sandbox="allow-same-origin" referrerpolicy="no-referrer" data-src="/report/{{ task_id }}/rendered/{{ a.sha256 }}" title="{{ a.filename }}, rendered without scripts or remote content"></iframe>
+   </div>
+   {% endif %}
+   {% if an.children %}
+   <div class="up-attach-children">
+      {% for child in an.children %}{{ attachment_card(child, depth + 1) }}{% endfor %}
+   </div>
+   {% endif %}
+</article>
+{%- endmacro %}
 {% block page_header %}
 <header class="up-report-head">
    <nav aria-label="Breadcrumb" class="up-breadcrumb">
@@ -184,15 +281,19 @@
             {% if mail.links %}
             <div class="up-table-scroll">
                <table class="up-table up-mail-table">
-                  <thead><tr><th>Shown as</th><th>Leads to</th><th>Flags</th><th>Sandbox</th></tr></thead>
+                  <thead><tr><th>Shown as</th><th>Leads to</th><th>Found in</th><th>Flags</th><th>Sandbox</th></tr></thead>
                   <tbody>
                   {% for link in mail.links %}
                   {% set child = children.get(link.target) %}
                   <tr>
-                     <td class="up-wrap" style="max-width: 260px">{{ link.display or '—' }}</td>
+                     <td class="up-wrap" style="max-width: 240px">{{ link.display or '—' }}</td>
                      <td class="up-mono up-wrap" style="font-size: 12px">
                         {{ link.target }}
                         {% if link.target != link.url %}<span class="up-mail-sub">via {{ link.url[:120] }}{% if link.url|length > 120 %}…{% endif %}</span>{% endif %}
+                     </td>
+                     <td style="font-size: 12px; max-width: 220px" class="up-wrap">
+                        {% if 'qr' in link.sources %}<span class="up-flag is-warn">QR code</span>{% elif 'attachment' in link.sources %}<span class="up-flag">attachment</span>{% else %}<span class="up-flag">body</span>{% endif %}
+                        {% if link.origin %}<span class="up-mail-sub">{{ link.origin }}</span>{% endif %}
                      </td>
                      <td>{% for flag in link.flags %}<span class="up-flag{% if flag in risky_flags %} is-bad{% endif %}">{{ link_flag_labels.get(flag, flag) }}</span>{% endfor %}</td>
                      <td class="up-row-actions" style="white-space: nowrap">
@@ -209,44 +310,23 @@
                </table>
             </div>
             {% else %}
-            <div class="up-empty-box"><strong>No links</strong><span>The message body contains no links.</span></div>
+            <div class="up-empty-box"><strong>No links</strong><span>Neither the message nor its attachments contain links.</span></div>
             {% endif %}
          </section>
       </div>
 
       {# ── Attachments ──────────────────────────────────────────────── #}
       <div class="up-tabpanel" role="tabpanel" id="panel-attachments" aria-labelledby="tab-attachments" hidden>
-         <section class="up-card up-mail-section">
-            {% if mail.attachments %}
-            <div class="up-table-scroll">
-               <table class="up-table up-mail-table">
-                  <thead><tr><th>Name</th><th>Type</th><th class="up-num">Size</th><th>Hashes</th><th>Flags</th></tr></thead>
-                  <tbody>
-                  {% for a in mail.attachments %}
-                  <tr>
-                     <td class="up-wrap up-mail-name">
-                        {{ a.filename or '(unnamed)' }}
-                        {% if a.inline %}<span class="up-mail-sub">inline{% if a.content_id %} · cid:{{ a.content_id }}{% endif %}</span>{% endif %}
-                        {% if a.embedded_message %}<span class="up-mail-sub">attached message: {{ a.embedded_message }}</span>{% endif %}
-                     </td>
-                     <td style="font-size: 12px">{{ a.detected_label }}<span class="up-mail-sub up-mono">{{ a.content_type }}</span></td>
-                     <td class="up-data up-num" style="white-space: nowrap">{{ a.size|filesizeformat }}</td>
-                     <td class="up-mono" style="font-size: 11.5px">
-                        <span class="up-hash"><span>SHA256</span> {{ a.sha256 }} <button type="button" class="up-icon-btn" data-copy="{{ a.sha256 }}" aria-label="Copy SHA-256" title="Copy SHA-256"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button></span>
-                        <span class="up-hash"><span>SHA1</span> {{ a.sha1 }}</span>
-                        <span class="up-hash"><span>MD5</span> {{ a.md5 }}</span>
-                     </td>
-                     <td>{% for flag in a.flags %}<span class="up-flag{% if flag in risky_flags %} is-bad{% endif %}">{{ attachment_flag_labels.get(flag, flag) }}</span>{% else %}<span style="color: var(--up-muted)">—</span>{% endfor %}</td>
-                  </tr>
-                  {% endfor %}
-                  </tbody>
-               </table>
-            </div>
-            <p class="up-mail-note">Attachments are hashed and typed by content, never opened. Look the hashes up in your threat-intelligence tools.</p>
-            {% else %}
-            <div class="up-empty-box"><strong>No attachments</strong><span>The message carries no attachments.</span></div>
-            {% endif %}
-         </section>
+         {% if mail.attachments %}
+         <div class="up-attach-toolbar">
+            <p class="up-mail-note" style="padding: 0">Attachments are analyzed statically, never opened or executed. Downloads are ZIP files encrypted with the password <code>infected</code>.</p>
+            {% if mail.samples %}<a class="up-btn up-btn-secondary up-btn-sm" href="/report/{{ task_id }}/samples/all.zip">Download all (zip)</a>{% endif %}
+         </div>
+         {% for a in mail.attachments %}{{ attachment_card(a, 0) }}{% endfor %}
+         {% if mail.inspection_notes %}<p class="up-mail-note">{{ mail.inspection_notes|join('; ') }}</p>{% endif %}
+         {% else %}
+         <section class="up-card up-mail-section"><div class="up-empty-box"><strong>No attachments</strong><span>The message carries no attachments.</span></div></section>
+         {% endif %}
       </div>
 
       {# ── Source ───────────────────────────────────────────────────── #}

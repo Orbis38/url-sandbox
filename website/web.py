@@ -849,14 +849,31 @@ class CustomReportView(BaseView):
         artifact = get_artifact(defaultdb['dbname'], task_id, 'email_message')
         if not artifact:
             return jsonify(error='No rendered message for this task'), 404
-        response = Response(artifact[0], mimetype='text/html')
-        # Defence in depth on top of the mailbox sanitizer and the iframe sandbox: nothing in
-        # the message may run or fetch, and only this application may frame it.
-        response.headers['Content-Security-Policy'] = MESSAGE_CSP
+        return inert_html_response(artifact[0])
+
+    @expose('/<task_id>/rendered/<digest>')
+    def view_rendered_attachment(self, task_id, digest):
+        '''
+        an HTML/SVG attachment, rendered as inert as the message body
+        '''
+        source = mail_output_file(task_id, 'rendered', digest, '.html')
+        if not source:
+            return jsonify(error='No rendering for this attachment'), 404
+        with open(source, 'rb') as handle:
+            return inert_html_response(handle.read())
+
+    @expose('/<task_id>/samples/<sample>.zip')
+    def download_sample(self, task_id, sample):
+        '''
+        one attachment (or all.zip with every one) as a ZIP encrypted with the password "infected"
+        '''
+        # (flask-admin reserves the view argument "name")
+        source = mail_output_file(task_id, 'samples', sample, '.zip')
+        if not source:
+            return jsonify(error='No such attachment'), 404
+        download = 'attachments-{}.zip'.format(task_id[:8]) if sample == 'all' else '{}.zip'.format(sample[:16])
+        response = send_file(source, mimetype='application/zip', as_attachment=True, download_name=download)
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Referrer-Policy'] = 'no-referrer'
-        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-        response.headers['Cache-Control'] = 'private, no-store'
         return response
 
     @expose('/<task_id>/original')
@@ -900,6 +917,31 @@ class CustomReportView(BaseView):
         response = Response(output.getvalue(), mimetype='text/csv')
         response.headers['Content-Disposition'] = 'attachment; filename="iocs-{}.csv"'.format(task_id[:8])
         return response
+
+
+SHA256_NAME = re.compile(r'^[0-9a-f]{64}$')
+
+
+def mail_output_file(task_id, folder, name, suffix):
+    '''a file the mailbox container wrote for this task, by sha256 (or "all"); None if absent'''
+    if not (SHA256_NAME.match(name) or (folder == 'samples' and name == 'all')):
+        return None
+    source = path.join(json_settings[environ["project_env"]]["output_folder"], task_id, 'mail', folder, name + suffix)
+    if not path.isfile(source) or path.islink(source):
+        return None
+    return source
+
+
+def inert_html_response(payload):
+    response = Response(payload, mimetype='text/html')
+    # Defence in depth on top of the mailbox sanitizer and the iframe sandbox: nothing in
+    # the message may run or fetch, and only this application may frame it.
+    response.headers['Content-Security-Policy'] = MESSAGE_CSP
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 MESSAGE_CSP = ("default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; "

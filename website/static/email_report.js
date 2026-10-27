@@ -101,11 +101,8 @@
         window.addEventListener('resize', closePop);
     }
 
-    // ── message iframe ─────────────────────────────────────
-    function bindFrame() {
-        var frame = document.getElementById('mail-frame');
-        if (!frame) return;
-
+    // ── inert iframes (message body, rendered HTML attachments) ──
+    function bindFrame(frame) {
         function fit() {
             var doc = frame.contentDocument;
             if (!doc || !doc.documentElement) return;
@@ -115,7 +112,7 @@
 
         function wire() {
             var doc = frame.contentDocument;
-            if (!doc) return;
+            if (!doc || doc.location.href === 'about:blank') return;
             fit();
             // images (inline cid: ones) can change the height after load
             Array.prototype.forEach.call(doc.images || [], function (image) {
@@ -138,9 +135,28 @@
         frame.addEventListener('load', wire);
         if (frame.contentDocument && frame.contentDocument.readyState === 'complete') wire();
         window.addEventListener('resize', fit);
-        // a hidden tab has no layout: measure again when the Message tab is shown
-        var tab = document.getElementById('tab-message');
-        if (tab) tab.addEventListener('click', function () { setTimeout(fit, 0); });
+        return fit;
+    }
+
+    function bindFrames() {
+        var frame = document.getElementById('mail-frame');
+        if (frame) {
+            var fit = bindFrame(frame);
+            // a hidden tab has no layout: measure again when the Message tab is shown
+            var tab = document.getElementById('tab-message');
+            if (tab) tab.addEventListener('click', function () { setTimeout(fit, 0); });
+        }
+        Array.prototype.forEach.call(document.querySelectorAll('.up-inert-frame'), bindFrame);
+    }
+
+    // "View rendered" on an HTML attachment: load its inert rendering on first use only
+    function toggleRendered(button) {
+        var box = document.querySelector('[data-render-box="' + button.getAttribute('data-render') + '"]');
+        if (!box) return;
+        var frame = box.querySelector('iframe');
+        if (frame && !frame.getAttribute('src')) frame.setAttribute('src', frame.getAttribute('data-src'));
+        box.hidden = !box.hidden;
+        button.textContent = box.hidden ? 'View rendered' : 'Hide rendering';
     }
 
     function bindPage() {
@@ -148,6 +164,11 @@
             var button = event.target.closest('[data-analyze]');
             if (button) {
                 analyze(links[parseInt(button.getAttribute('data-analyze'), 10)], button.hasAttribute('data-live'));
+                return;
+            }
+            var render = event.target.closest('[data-render]');
+            if (render) {
+                toggleRendered(render);
                 return;
             }
             var jump = event.target.closest('[data-goto-tab]');
@@ -162,7 +183,7 @@
         links = readJson('email-links', []);
         flagInfo = readJson('email-link-flags', flagInfo);
         bindPop();
-        bindFrame();
+        bindFrames();
         bindPage();
     }
 

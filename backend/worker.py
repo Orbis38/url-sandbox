@@ -294,10 +294,11 @@ def analyze_email(self, parsed):
             detach=True,
             network_mode='none',
             read_only=True,
-            tmpfs={'/tmp': 'size=64m'},
+            # attachments are unpacked here (archives, disk images), never on the host disk
+            tmpfs={'/tmp': 'size=512m'},
             cap_drop=['ALL'],
             security_opt=['no-new-privileges'],
-            mem_limit='512m',
+            mem_limit='1g',
             pids_limit=64,
             nano_cpus=1000000000,
             labels={'url-sandbox.managed': 'true', 'url-sandbox.task': parsed['task']}

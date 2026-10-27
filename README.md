@@ -197,7 +197,27 @@ The report opens on the **Message** tab, which shows the email like a mail clien
 
 The other tabs cover authentication results (SPF/DKIM/DMARC), the relay path with public IPs and per-hop delays, all raw headers, every link with its flags, attachments with MD5/SHA-1/SHA-256, the type detected from content and flags (executable, macros, HTML, disk image, archive/encrypted archive, double extension, RTL override, type mismatch), and the plain-text/HTML source and MIME structure. The side rail summarizes the verdict and indicators; IOCs export as CSV or JSON, and the original file can be downloaded.
 
-Attachments are hashed and typed but never opened or executed. Office macros and Windows executables need a Windows detonation environment, which is outside the scope of this container.
+### Attachment analysis
+
+Every attachment is analyzed statically inside the same network-less container. Nothing is ever opened or executed; archives and disk images are unpacked in a RAM-only `/tmp` with limits (depth 3, 300 files, 200 MB, compression-ratio check against zip bombs).
+
+| Content | Tool | What the report shows |
+| :--- | :--- | :--- |
+| Office (doc/xls/ppt, OOXML, xlsb) | **olevba**, **mraptor** (oletools) | VBA source, auto-exec/suspicious keywords, decoded strings and IOCs, Excel 4.0 macros, VBA stomping, A/W/X classification |
+| Office | **oleobj**, **msodde**, relationship parsing | Embedded files and OLE packages (inspected recursively), remote template injection / external objects, DDE/DDEAUTO commands, encrypted documents |
+| RTF | **rtfobj** | Embedded OLE objects, Equation Editor (CVE-2017-11882) |
+| PDF | **pypdf**, pdfid-style keyword count, **pdftoppm** | `/JavaScript`, `/OpenAction`, `/Launch`, `/EmbeddedFile`…, every clickable link, embedded files, first-page preview |
+| zip/7z/rar/gz/tar/cab, ISO/IMG/VHD | **7-Zip**, `zipfile`, `tarfile` | Content tree, analyzed recursively; encrypted archives are tried with `infected`, common passwords and **passwords written in the email** |
+| `.lnk` | **LnkParse3** | Target, arguments, decoded `powershell -enc` |
+| OneNote | built-in parser | Embedded files |
+| PE (exe/dll) | **pefile** | imphash, compile time, signature present, section entropy, suspicious imports |
+| HTML/SVG | built-in rules | HTML smuggling, local phishing pages (password fields, Telegram/Discord/PHP collectors), obfuscation, redirects; an inert rendering viewable in the report |
+| Images, PDF pages | **pyzbar** | QR codes (quishing): their URLs join the Links tab |
+| Everything | **yara-python** | Matches of the rules in [`rules/`](rules/) |
+
+URLs found inside attachments appear in the Links tab with where they came from, and open in the URL sandbox like the body links. Each attachment and extracted file can be downloaded as a ZIP encrypted with the password `infected` (or all of them at once), for VirusTotal, MalwareBazaar or a Windows sandbox. Executing Office macros or Windows binaries needs a Windows detonation environment and is outside the scope of this container.
+
+**YARA rules:** `rules/urlprobe_examples.yar` contains a few example rules written for this project (EICAR, VBA auto-exec + shell, encoded PowerShell, HTML smuggling, Telegram exfiltration, LNK launching system tools, PE inside documents). Add your own `.yar`/`.yara` files to `rules/` and rebuild the image with `docker compose build mailbox`. Check the licence of public rule sets before adding them (several are non-commercial).
 
 ---
 

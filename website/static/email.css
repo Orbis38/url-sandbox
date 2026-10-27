@@ -129,3 +129,56 @@
 .up-linkpop-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .up-linkpop-note { margin: 8px 0 0; font-size: 12px; color: var(--up-muted); }
 .up-hint svg { flex: 0 0 auto; }
+
+/* ── attachment analysis cards ────────────────────────── */
+.up-attach-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.up-attach-card {
+     background: var(--up-bg-card); border: 1px solid var(--up-border); border-radius: 12px;
+     padding: 16px 18px; margin-bottom: 14px; min-width: 0;
+}
+.up-attach-card.is-risky { border-left: 3px solid var(--up-red); }
+.up-attach-card.is-child { background: var(--up-bg-sunken); margin: 12px 0 0; }
+.up-attach-children { margin-top: 4px; padding-left: 14px; border-left: 1px dashed var(--up-border); }
+.up-attach-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.up-attach-title { min-width: 0; flex: 1 1 260px; }
+.up-attach-title > div { margin-top: 6px; }
+.up-attach-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.up-attach-hashes { margin-top: 10px; font-size: 11.5px; }
+.up-findings { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.up-findings li { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; min-width: 0; }
+.up-findings li > div { min-width: 0; flex: 1; }
+.up-findings strong { font-weight: 600; }
+.up-findings pre {
+     margin: 4px 0 0; padding: 0; background: none !important; border: none; white-space: pre-wrap; word-break: break-word;
+     font-size: 11.5px; color: var(--up-text-mid) !important; max-height: 160px; overflow: auto;
+}
+.up-finding-tool {
+     flex: 0 0 auto; min-width: 70px; text-align: center; padding: 1px 6px; border-radius: 5px;
+     font-family: var(--up-mono); font-size: 10.5px; font-weight: 600; color: var(--up-slate); background: var(--up-slate-bg);
+}
+.up-findings .is-high .up-finding-tool { color: var(--up-red); background: var(--up-red-bg); }
+.up-findings .is-medium .up-finding-tool { color: var(--up-amber); background: var(--up-amber-bg); }
+.up-attach-preview { margin: 12px 0 0; }
+.up-attach-preview img { display: block; max-width: min(100%, 360px); border: 1px solid var(--up-border); border-radius: 8px; background: #fff; }
+.up-attach-preview figcaption { margin-top: 4px; font-size: 11.5px; color: var(--up-muted); }
+.up-attach-facts { margin: 12px 0 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 12.5px; }
+.up-attach-facts dt { color: var(--up-muted); font-weight: 600; }
+.up-attach-facts dd { margin: 0; overflow-wrap: anywhere; }
+.up-attach-more { margin-top: 12px; }
+.up-attach-more summary { cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.up-attach-more ul { margin: 8px 0 0; padding-left: 18px; font-size: 12px; }
+.up-attach-more li span { color: var(--up-muted); margin-left: 6px; }
+.up-attach-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; }
+.up-code {
+     margin: 6px 0 0 !important; padding: 10px 12px; max-height: 420px; overflow: auto; white-space: pre; font-size: 11.5px; line-height: 1.55;
+     background: var(--up-bg-input) !important; border: 1px solid var(--up-border-soft); border-radius: 8px !important; color: var(--up-text-nav) !important;
+}
+.up-macro { margin-top: 10px; }
+.up-macro-name { font-size: 12px; font-weight: 600; }
+.up-macro-name span { color: var(--up-muted); font-weight: 400; margin-left: 6px; }
+.up-keywords { margin-top: 8px; }
+.up-keywords td { padding: 6px 12px !important; font-size: 12px; }
+.up-keywords tr.kw-autoexec td:first-child, .up-keywords tr.kw-suspicious td:first-child { color: var(--up-red); font-weight: 600; }
+.up-keywords tr.kw-ioc td:first-child { color: var(--up-amber); font-weight: 600; }
+.up-attach-render { margin-top: 12px; border: 1px solid var(--up-border); border-radius: 8px; overflow: hidden; background: #fff; }
+.up-attach-render iframe { display: block; width: 100%; height: 360px; border: 0; background: #fff; color-scheme: light; }

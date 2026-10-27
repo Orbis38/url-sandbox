@@ -46,8 +46,8 @@ json_settings = {
             "queue": "analyze_url_queue"
         },
         "email_worker": {
-            "task_time_limit": 180,
-            "parse_timeout": 120,
+            "task_time_limit": 300,
+            "parse_timeout": 240,
             "max_upload_bytes": 25 * 1024 * 1024,
             "name": "analyze_email",
             "queue": "analyze_url_queue"
